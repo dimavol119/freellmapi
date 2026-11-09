@@ -22,6 +22,12 @@ npm run build
 
 Client translations: run `npm run check:i18n` from `client/` when you touch UI strings.
 
+## Browser testing
+
+Use `playwright-cli` (skill in `.claude/skills/playwright-cli/`) to drive the dashboard in a real
+browser: `npm run dev`, then `playwright-cli open http://localhost:5173`, `playwright-cli snapshot`,
+and act on the `e<N>` refs it prints. Install once with `npm install -g @playwright/cli@latest`.
+
 ## Rules for both agents
 
 - Small, focused diffs. Every behaviour change ships with a test that actually exercises it.
