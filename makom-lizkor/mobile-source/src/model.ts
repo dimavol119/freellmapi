@@ -1,4 +1,4 @@
-export const TOPICS = ['אישי', 'משפחה', 'עבודה', 'רעיונות', 'טיולים', 'ימי הולדת', 'לימודים'];
+export const TOPICS = ['אישי', 'מטרות', 'חלומות', 'השראה', 'משפחה', 'עבודה', 'רעיונות', 'מתכונים', 'טיולים', 'ימי הולדת', 'לימודים'];
 export type Memory = {
   id: string; title: string; note: string; why: string; intent: string;
   topic: string; location: string; images: string[]; due: string;

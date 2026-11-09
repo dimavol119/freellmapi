@@ -4,7 +4,7 @@ export function defaultTheme(now:Date=new Date()):ThemeName{const m=now.getMonth
 /** "Personal archive" look: warm paper, ink text and one terracotta accent (the key keeps its historic name `orange`). */
 export const CLASSIC={bg:'#f3ede3',panel:'#fbf8f2',field:'#fffdf9',line:'#ddd3c3',text:'#1f1a15',muted:'#6b6157',orange:'#a84a22',soft:'#ebe1d2',ink2:'#40372e',side:'#ece4d7'};
 /** Each topic gets a quiet ink colour instead of a symbol. */
-export const TOPIC_COLORS:Record<string,string>={'אישי':'#a84a22','משפחה':'#86506f','עבודה':'#3e5c76','רעיונות':'#9a7424','טיולים':'#4f7356','ימי הולדת':'#9c3d4e','לימודים':'#565b8a'};
+export const TOPIC_COLORS:Record<string,string>={'אישי':'#a84a22','משפחה':'#86506f','עבודה':'#3e5c76','רעיונות':'#9a7424','טיולים':'#4f7356','ימי הולדת':'#9c3d4e','לימודים':'#565b8a','מטרות':'#b0462c','חלומות':'#4c5196','השראה':'#5f7a3c','מתכונים':'#9a5a1e'};
 export const topicColor=(name:string)=>TOPIC_COLORS[name]||'#6b6157';
 /** Fonts are hosted with the site (public/fonts); native builds use the system fonts. */
 export const FONTS={serif:'"Frank Ruhl Libre", "Noto Serif Hebrew", Georgia, serif',sans:'Assistant, "Noto Sans Hebrew", system-ui, -apple-system, "Segoe UI", Arial, sans-serif'};
@@ -28,8 +28,8 @@ export function halloweenColor(input:string):string{
 export const HALLOWEEN=Object.fromEntries(Object.entries(CLASSIC).map(([k,v])=>[k,halloweenColor(v)])) as typeof CLASSIC;
 export const PALETTES:Record<ThemeName,typeof CLASSIC>={classic:CLASSIC,halloween:HALLOWEEN};
 export const ICONS:Record<ThemeName,Record<string,string>>={
-  classic:{'אישי':'●','משפחה':'●','עבודה':'●','רעיונות':'●','טיולים':'●','ימי הולדת':'●','לימודים':'●'},
-  halloween:{'אישי':'👻','משפחה':'🦇','עבודה':'🕸️','רעיונות':'🔮','טיולים':'🏚️','ימי הולדת':'🎂','לימודים':'📜'}
+  classic:{'אישי':'●','משפחה':'●','עבודה':'●','רעיונות':'●','טיולים':'●','ימי הולדת':'●','לימודים':'●','מטרות':'●','חלומות':'●','השראה':'●','מתכונים':'●'},
+  halloween:{'אישי':'👻','משפחה':'🦇','עבודה':'🕸️','רעיונות':'🔮','טיולים':'🏚️','ימי הולדת':'🎂','לימודים':'📜','מטרות':'🎯','חלומות':'🌙','השראה':'🕯️','מתכונים':'🧪'}
 };
 /** Returns a copy of a style map with every #hex colour value recoloured for the theme. */
 export function themeStyles<T>(styles:T,theme:ThemeName):T{
