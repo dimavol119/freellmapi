@@ -28,6 +28,15 @@ Use `playwright-cli` (skill in `.claude/skills/playwright-cli/`) to drive the da
 browser: `npm run dev`, then `playwright-cli open http://localhost:5173`, `playwright-cli snapshot`,
 and act on the `e<N>` refs it prints. Install once with `npm install -g @playwright/cli@latest`.
 
+## Design and video skills
+
+- `scroll-craft` (`.claude/skills/scroll-craft/`): premium scroll-driven websites. Image/video
+  generation is optional and needs `KIE_AI_API_KEY` in a local `.env` (never committed); it costs
+  kie.ai credits, so confirm before generating.
+- HyperFrames (`.claude/skills/hyperframes*`, `media-use`, `slideshow`, `figma`, `style-sampling`,
+  `reverse-any-video`, `remotion-to-hyperframes`): HTML to MP4 video. CLI via
+  `npx hyperframes` (Node 22+, ffmpeg).
+
 ## Rules for both agents
 
 - Small, focused diffs. Every behaviour change ships with a test that actually exercises it.
