@@ -61,13 +61,14 @@ context windows.
 | **Reasonix** | `setup-reasonix` | `http://localhost:3001/v1` | OpenAI Chat (`kind = "openai"`) |
 | **ZCode** | `setup-zcode` | `http://localhost:3001/v1` | OpenAI Chat (`openai-chat-completions`) |
 | **QwenPaw** | Manual setup | `http://localhost:3001/v1` | OpenAI Chat (`chat.completions`) |
+| **claude-mem** (memory observer) | Manual setup | `http://localhost:3001/v1` | OpenAI Chat (`openai-compatible` provider) |
 | **Cursor** | `setup-cursor` prints the guide | public `https://…/v1` | OpenAI Chat |
 | **Anything else** | `setup-generic` prints a ready block | `http://localhost:3001/v1` | OpenAI Chat |
 
 The root-vs-`/v1` distinction matters: Claude Code expects the server root
 because it appends the Anthropic Messages path. OpenAI-compatible clients in
 this table—including Cline, Aider, Goose, Codex, Continue, OpenCode, Qwen,
-Roo, Kilo, Crush, MiMo Code, AtomCode, OpenClaw, Hermes Agent, Pi, Reasonix, ZCode, QwenPaw, and DeepSeek Harness—expect their configured
+Roo, Kilo, Crush, MiMo Code, AtomCode, OpenClaw, Hermes Agent, Pi, Reasonix, ZCode, QwenPaw, claude-mem, and DeepSeek Harness—expect their configured
 base URL to include `/v1`.
 
 ### DeepSeek Harness (`dsh`)
@@ -320,6 +321,34 @@ the QwenPaw container can reach, while keeping the `/v1` suffix. Do not put the
 unified key in a URL, screenshot, or issue report. See QwenPaw's
 [official model configuration guide](https://qwenpaw.agentscope.io/docs/models)
 for the current Console field names.
+
+### claude-mem
+
+[claude-mem](https://github.com/thedotmack/claude-mem) gives Claude Code, Codex
+and other agents memory across sessions by running a second "observer" model
+that takes notes while you work. By default the observer runs on your
+Anthropic plan; pointing it at FreeLLMAPI moves that background traffic onto
+free tiers instead. The agent you chat with is not affected.
+
+Install claude-mem first (`npx claude-mem install`), then add these keys to
+`~/.claude-mem/settings.json` and restart its worker:
+
+```json
+{
+  "CLAUDE_MEM_PROVIDER": "openai-compatible",
+  "CLAUDE_MEM_OPENAI_COMPAT_BASE_URL": "http://localhost:3001/v1",
+  "CLAUDE_MEM_OPENAI_COMPAT_API_KEY": "<unified-key>",
+  "CLAUDE_MEM_OPENAI_COMPAT_MODEL": "auto"
+}
+```
+
+`auto` lets FreeLLMAPI route each request; any id from
+`GET http://localhost:3001/v1/models` works too. When the observer's provider
+cannot serve a request, claude-mem falls back to
+`CLAUDE_MEM_QUOTA_FALLBACK_PROVIDER`, which defaults to your Anthropic plan.
+Set it to `"off"` to keep memory traffic off the plan entirely, at the cost of
+skipped notes while every free provider is rate-limited. The settings file
+holds the unified key, so keep it out of screenshots and issue reports.
 
 ## Native Gemini clients
 
