@@ -7,12 +7,14 @@ export type User={id:string;email:string;emailVerified?:boolean;verificationRequ
 let revision=0;let synced:Memory[]=[];let loaded=false;let epoch=0;let saving=false;
 /** True while a save to the account is in flight (used to warn before closing the page). */
 export const isSaving=()=>saving;let activeUserId:string|null=null;const norm=(i:Memory):Memory=>({...i,notificationScheduled:false});
-const base=Platform.OS==='web'?'':(process.env.EXPO_PUBLIC_API_URL||'https://makom-lizkor-dima.dimavol11.chatgpt.site');export const privacyUrl=base+'/privacy.html';
+const base=Platform.OS==='web'?'':(process.env.EXPO_PUBLIC_API_URL||'https://makom-lizkor-dima.dimavol11.chatgpt.site');export const privacyUrl=process.env.EXPO_PUBLIC_PREVIEW==='1'?'privacy.html':base+'/privacy.html';
 export class AccountError extends Error{constructor(public code:string){super(code)}}
 /** Time allowed for a request: 20 s plus time to upload the body at a slow mobile speed (~40 KB/s), at most 4 minutes. */
 export const requestTimeout=(bodyLength:number)=>Math.min(240000,20000+Math.ceil(bodyLength/40));
 async function api(path:string,method='GET',data?:unknown){const body=data?JSON.stringify(data):undefined;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),requestTimeout(body?.length||0));try{const r=await fetch(base+'/api/'+path,{method,credentials:'include',headers:{...(data?{'Content-Type':'application/json'}:{}),...(activeUserId?{'X-Makom-User':activeUserId}:{})},body,signal:controller.signal});const result=await r.json();if(!r.ok)throw new AccountError(result.error||'SERVER_ERROR');return result;}catch(e){if(e instanceof AccountError)throw e;throw new AccountError('CONNECTION_ERROR')}finally{clearTimeout(timer)}}
-export async function session():Promise<{available:boolean;user:User|null}>{const result=await api('auth/session');activeUserId=result.user?.id||null;revision=0;synced=[];loaded=false;epoch++;return {available:true,user:result.user}}
+/** Preview build (EXPO_PUBLIC_PREVIEW=1): no server, no accounts; items stay in this browser only. */
+export const PREVIEW=process.env.EXPO_PUBLIC_PREVIEW==='1';
+export async function session():Promise<{available:boolean;user:User|null}>{if(PREVIEW){activeUserId=null;revision=0;synced=[];loaded=false;epoch++;return {available:false,user:null}}const result=await api('auth/session');activeUserId=result.user?.id||null;revision=0;synced=[];loaded=false;epoch++;return {available:true,user:result.user}}
 export async function authenticate(mode:'register'|'login',email:string,password:string):Promise<User>{const invalid=credentialsError(email,password)||(mode==='register'?strongPasswordError(password,email):null);if(invalid)throw new AccountError(invalid);const result=await api('auth/'+mode,'POST',{email:email.trim().toLowerCase(),password});activeUserId=result.user.id;revision=0;synced=[];loaded=false;epoch++;return result.user}
 export async function logout():Promise<void>{try{await api('auth/logout','POST',{})}catch(e){if(!(e instanceof AccountError)||e.code!=='SIGN_IN_REQUIRED')throw e}activeUserId=null;revision=0;synced=[]}
 export async function requestPasswordReset(email:string):Promise<void>{const invalid=emailError(email);if(invalid)throw new AccountError(invalid);await api('auth/forgot','POST',{email:email.trim().toLowerCase()})}

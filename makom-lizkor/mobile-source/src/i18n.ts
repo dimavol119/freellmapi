@@ -556,5 +556,7 @@ Object.assign(translations,{
   "הפעולה נחסמה מטעמי אבטחה. פתח את האתר מהכתובת הרגילה ונסה שוב.": {"en": "The action was blocked for security. Open the site from its usual address and try again.", "ru": "Действие заблокировано из соображений безопасности. Откройте сайт по обычному адресу и повторите."},
   "הכניסה עם Google עדיין לא פעילה.": {"en": "Google sign-in is not active yet.", "ru": "Вход через Google пока не активен."},
   "הכניסה עם פייסבוק אינה פעילה.": {"en": "Facebook sign-in is not active.", "ru": "Вход через Facebook не активен."},
-  "האתר אינו משתמש בבינה מלאכותית.": {"en": "This site does not use artificial intelligence.", "ru": "Этот сайт не использует искусственный интеллект."}
+  "האתר אינו משתמש בבינה מלאכותית.": {"en": "This site does not use artificial intelligence.", "ru": "Этот сайт не использует искусственный интеллект."},
+  "גרסת תצוגה": {"en": "Preview version", "ru": "Демо-версия"},
+  "כאן אפשר לנסות את מקום לזכור. הפריטים נשמרים רק בדפדפן הזה, וההרשמה לחשבון פועלת באתר עצמו.": {"en": "Try A Place to Remember here. Items are saved only in this browser; accounts are available on the main site.", "ru": "Здесь можно попробовать «Место для воспоминаний». Записи сохраняются только в этом браузере, а аккаунты доступны на основном сайте."}
 });
