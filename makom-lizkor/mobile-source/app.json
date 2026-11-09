@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "מקום לזכור",
+    "slug": "makom-lizkor",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "scheme": "makom-lizkor",
+    "ios": { "supportsTablet": true, "infoPlist": {"CFBundleLocalizations": ["he", "en"]} },
+    "android": { "permissions": ["POST_NOTIFICATIONS"] },
+    "web": { "name": "מקום לזכור", "bundler": "metro", "output": "single" },
+    "plugins": [
+      ["expo-image-picker", {"photosPermission": "בחר תמונות וצילומי מסך שתרצה לשמור בזיכרונות שלך.", "cameraPermission": false, "microphonePermission": false}],
+      ["expo-notifications", {"color": "#f6a15b"}]
+    ]
+  }
+}

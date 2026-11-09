@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1792880894321,
+      "tag": "0000_slippery_ghost_rider",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793107997940,
+      "tag": "0001_minor_tana_nile",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793108761595,
+      "tag": "0002_organic_wraith",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793200000000,
+      "tag": "0003_password_resets",
+      "breakpoints": true
+    }
+  ]
+}

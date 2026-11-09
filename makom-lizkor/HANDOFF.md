@@ -1,0 +1,81 @@
+# Makom Lizkor — project handoff (2026-11-04)
+
+## Storage and recovery update
+
+The account API now copies the current R2 workspace to a private revision snapshot before replacing it. If the old workspace cannot be read or its backup cannot be written, the save fails and the current database pointer stays unchanged. Successful saves retain the three previous revisions (best-effort pruning; a failed cleanup can temporarily leave more). Recovery starts with saves made after this release; previously removed items cannot be retroactively recovered. Account deletion also deletes snapshots.
+
+Authenticated `GET /api/backups` lists revision numbers; `GET /api/backups/:revision` reads only the signed-in user's snapshot. No schema changes or migrations were needed. The 20 MB workspace limit remains, so up to three full historical snapshots increase per-account storage usage; no billing or provider plan was changed. Monitor hosting quotas as usage grows.
+
+The client captures its sync baseline before asynchronous image conversion, rejects overlapping saves, ignores stale refresh results, and checks account changes before each write/retry. A server conflict merges remote additions before retrying.
+
+`mobile-source/src/BackupPanel.tsx` offers dated JSON export, user-initiated sharing to Drive/iCloud, import preview and recovery from previous account versions. `backup.ts` validates version, item count, size and embedded image data. Import/recovery is additive: unchanged duplicates are skipped, differing versions get separate IDs, and current items are never replaced. Restored notifications must be scheduled again. Native file picking uses the installed Expo File API; actual device testing remains necessary. Backup import accepts up to 32 MB for formatted JSON; the server still enforces 20 MB per save.
+
+Drive/iCloud remains MANUAL file export/share and file selection, as previously requested. No Drive OAuth access, refresh token, automatic external upload or user's Drive contents were added/accessed. The UI explicitly tells users to check the saved file and offers no false guarantee that closing a share sheet means upload succeeded.
+
+Validation for this update: 28 backend tests and 43 client tests passed, as did both TypeScript checks, Expo web export and server build. Local browser QA restored a previous revision alongside a newer edit, imported a synthetic JSON backup after preview, then downloaded and parsed the resulting three-item backup. The API confirmed all three titles remained. Mobile-width (390×844) layout checked. Synthetic local test account and its snapshots were deleted afterward. No production account records were changed during testing. Actual Google Drive/iCloud provider apps and native devices were not exercised.
+
+Personal reminders, screenshots, notes and birthdays, with Hebrew / English / Russian UI.
+Production: https://makom-lizkor-dima.dimavol11.chatgpt.site/
+
+## Source of truth
+
+- `mobile-source/App.tsx`: Expo / React Native UI, exported to web.
+- `mobile-source/src/services/account.ts`: session, authentication and cloud storage client.
+- `mobile-source/src/auth-validation.ts`: form validation.
+- `lib/account-api.ts`: server API, email/password, Google, Facebook infrastructure and recovery.
+- `tests/accounts.test.cjs`: SQLite-backed server integration tests with mocked mail/OAuth.
+- `mobile-source/tests/*.test.cjs`: client/domain tests.
+- `drizzle/`: applied migrations 0000–0003; do not modify applied SQL.
+- `public/index.html` and `public/ui.html`: copies of Expo web export. Rebuild from mobile-source; do not edit generated JS.
+- `.openai/hosting.json`: existing Sites project, D1 `DB` and R2 `BUCKET` bindings.
+
+## Current service state
+
+Email/password registration and Google login are enabled. Password recovery is enabled using Brevo's free tier. Codes are sent only to the requesting account's address; no CC/BCC. Runtime secrets are not included in this archive. Importing this ZIP elsewhere does not copy the database, user uploads, OAuth settings or email keys.
+
+Facebook/Meta is deliberately DISABLED (`FACEBOOK_LOGIN_ENABLED=false`). The owner paused this work: this is a personal project without a registered business. Do not invent company details or resume business verification. Basic app configuration exists but public verification and a real OAuth test remain incomplete.
+
+Owner requires zero spending. Do not enable paid APIs, purchase a domain, register a company, add billing, or use AI APIs. Search is ordinary local text search. Do not expose secrets in chat, code, logs or archives.
+
+## Registration audit fixes
+
+- Separate email/password validation, 12–128 character bounds, confirmation on registration/reset, password visibility and autofill hints.
+- Disable auth tabs and inputs while requests are pending; reset stale form messages when changing modes.
+- Hide unconfigured Facebook from the registration form; retain setup status in settings.
+- Successful authentication remains successful if cloud data loading fails: show retry instead of prompting duplicate registration.
+- Clear previous account data on account transitions and block saving while loading failed.
+- A failed session lookup no longer silently treats an unknown session as a guest.
+- Expected account ID accompanies client requests; the server rejects old-tab reads/writes/deletion/logout after another tab changes the account cookie. Older clients without this optional header remain compatible; refresh open tabs after release.
+- Prevent late background refresh from restoring items after account transition.
+- A failed older reset email cannot delete a newer reset code.
+
+## Validation commands
+
+Audit result: 26 server tests and 37 client tests passed; TypeScript passed in both projects; Expo web export and server production build passed. Local browser checks covered invalid email, short password, mismatched confirmation, switching to login, successful login to a synthetic locally-created account, and logout. At 390×844 the form scrolls to its submit button. The temporary local account was deleted after testing. No real user's password was changed and no live reset emails were sent during this audit.
+
+Use a current Node release supporting `node:sqlite` (tested on Node 24).
+
+```sh
+npm ci
+node --test tests/accounts.test.cjs
+npx tsc --noEmit
+cd mobile-source
+npm ci
+node --test tests/*.test.cjs
+npx tsc --noEmit
+npx expo export --platform web --output-dir ../web-export
+```
+
+Copy `web-export/` contents into `public/`, and copy its index.html to both public/index.html and public/ui.html. Preserve public/privacy.html and favicon.svg. Then run the server build (`npm run build` from the root). Existing Sites publication uses its source/build helper and the same project ID, preserving the public audience.
+
+## Known limits / follow-up
+
+- Tests use local data and mock mail/OAuth, not real owners' passwords. No claim of end-to-end Google consent or real iPhone/Galaxy validation in this audit.
+- Registration does not yet verify email ownership. Do not auto-link OAuth accounts merely because email strings match. Existing email users sign in first, then link Google in settings.
+- Native store packages and Apple/SMS login are not released/configured.
+- Web reminders export calendar events; no closed-browser web push.
+- No account-to-account sharing. Google Drive/iCloud backup uses manual file export/share, not automatic sync.
+- Workspace save limit: 20 MB. No promise of unlimited free storage or permanent free provider availability.
+- On a failed session lookup, the UI asks to retry rather than opening a potentially wrong workspace. Offline guest startup could be designed separately with an explicit account/local mode choice.
+
+Archive intentionally excludes node_modules, .git, environment secrets, build cache, local databases, logs, and real user data. Public contact address in privacy.html is intentionally public and owner-approved.

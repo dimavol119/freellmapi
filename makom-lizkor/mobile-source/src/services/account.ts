@@ -1,0 +1,35 @@
+import {Platform} from 'react-native';
+import {Memory} from '../model';
+import {portableMemories} from './export';
+import {saveWithMerge} from '../merge';
+import {credentialsError,emailError,passwordError} from '../auth-validation';
+export type User={id:string;email:string};
+let revision=0;let synced:Memory[]=[];let loaded=false;let epoch=0;let saving=false;let activeUserId:string|null=null;const norm=(i:Memory):Memory=>({...i,notificationScheduled:false});
+const base=Platform.OS==='web'?'':(process.env.EXPO_PUBLIC_API_URL||'https://makom-lizkor-dima.dimavol11.chatgpt.site');export const privacyUrl=base+'/privacy.html';
+export class AccountError extends Error{constructor(public code:string){super(code)}}
+async function api(path:string,method='GET',data?:unknown){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);try{const r=await fetch(base+'/api/'+path,{method,credentials:'include',headers:{...(data?{'Content-Type':'application/json'}:{}),...(activeUserId?{'X-Makom-User':activeUserId}:{})},body:data?JSON.stringify(data):undefined,signal:controller.signal});const result=await r.json();if(!r.ok)throw new AccountError(result.error||'SERVER_ERROR');return result;}catch(e){if(e instanceof AccountError)throw e;throw new AccountError('CONNECTION_ERROR')}finally{clearTimeout(timer)}}
+export async function session():Promise<{available:boolean;user:User|null}>{const result=await api('auth/session');activeUserId=result.user?.id||null;revision=0;synced=[];loaded=false;epoch++;return {available:true,user:result.user}}
+export async function authenticate(mode:'register'|'login',email:string,password:string):Promise<User>{const invalid=credentialsError(email,password);if(invalid)throw new AccountError(invalid);const result=await api('auth/'+mode,'POST',{email:email.trim().toLowerCase(),password});activeUserId=result.user.id;revision=0;synced=[];loaded=false;epoch++;return result.user}
+export async function logout():Promise<void>{try{await api('auth/logout','POST',{})}catch(e){if(!(e instanceof AccountError)||e.code!=='SIGN_IN_REQUIRED')throw e}activeUserId=null;revision=0;synced=[]}
+export async function requestPasswordReset(email:string):Promise<void>{const invalid=emailError(email);if(invalid)throw new AccountError(invalid);await api('auth/forgot','POST',{email:email.trim().toLowerCase()})}
+export async function confirmPasswordReset(email:string,code:string,password:string):Promise<void>{const invalid=emailError(email)||passwordError(password);if(invalid)throw new AccountError(invalid);if(!/^\d{8}$/.test(code.trim()))throw new AccountError('INVALID_CODE');await api('auth/reset','POST',{email:email.trim().toLowerCase(),code:code.trim(),password})}
+export async function deleteAccount(confirmEmail:string):Promise<void>{await api('account/delete','POST',{confirmEmail});activeUserId=null;revision=0;synced=[]}
+export async function loadCloudMemories():Promise<Memory[]>{
+ const expected=activeUserId,stamp=epoch;if(!expected)throw new AccountError('SIGN_IN_REQUIRED');
+ if(saving)throw new AccountError('SAVE_IN_PROGRESS');
+ const data=await api('memories');if(expected!==activeUserId||stamp!==epoch)throw new AccountError('SESSION_CHANGED');
+ revision=data.revision;synced=data.items.map(norm);loaded=true;return synced;
+}
+export async function saveCloudMemories(items:Memory[]):Promise<Memory[]>{
+ if(!activeUserId)throw new AccountError('SIGN_IN_REQUIRED');if(!loaded)throw new AccountError('WORKSPACE_NOT_LOADED');if(saving)throw new AccountError('SAVE_IN_PROGRESS');
+ const expected=activeUserId,baseItems=synced;let expectedRevision=revision;const stamp=++epoch;saving=true;
+ const check=()=>{if(expected!==activeUserId||stamp!==epoch)throw new AccountError('SESSION_CHANGED')};
+ try{
+  const mine=(await portableMemories(items)).map(norm);check();
+  const result=await saveWithMerge({mine,base:baseItems,put:async list=>{check();const data=await api('memories','PUT',{items:list,revision:expectedRevision});check();expectedRevision=data.revision},latest:async()=>{check();const data=await api('memories');check();expectedRevision=data.revision;return data.items.map(norm)},isConflict:e=>e instanceof AccountError&&e.code==='CONFLICT'});
+  check();revision=expectedRevision;synced=result.items;return result.merged?result.items:items;
+ }finally{saving=false}
+}
+export async function listCloudBackups():Promise<number[]>{const result=await api('backups');return result.versions}
+export async function readCloudBackup(version:number):Promise<Memory[]>{const result=await api('backups/'+version);return result.items.map(norm)}
+export function accountErrorMessage(error:unknown):string{const code=error instanceof AccountError?error.code:'SERVER_ERROR';if(['יש להזין כתובת אימייל תקינה.','הסיסמה צריכה להכיל בין 12 ל־128 תווים.'].includes(code))return code;return ({WORKSPACE_NOT_LOADED:'יש לטעון את החשבון לפני שמירה. נסה שוב.',SAVE_IN_PROGRESS:'השמירה הקודמת עדיין מתבצעת. המתן רגע.',STORAGE_UNAVAILABLE:'לא ניתן לקרוא את השמירה הקודמת. הנתונים לא הוחלפו. נסה שוב.',SESSION_CHANGED:'החשבון השתנה בלשונית אחרת. רענן את הדף לפני המשך העבודה.',CONFLICT:'הנתונים השתנו במכשיר אחר ולא הצלחנו לאחד אותם. נסה שוב בעוד רגע.',INVALID_LOGIN:'האימייל או הסיסמה אינם נכונים.',INVALID_CREDENTIAL_FORMAT:'יש להזין אימייל תקין וסיסמה באורך 12 תווים לפחות.',EMAIL_IN_USE:'האימייל כבר רשום. נסה להתחבר.',TOO_MANY_ATTEMPTS:'בוצעו ניסיונות רבים. נסה שוב מאוחר יותר.',BACKUP_TOO_LARGE:'הפריטים גדולים מדי לשמירה אחת. הגודל המרבי כרגע הוא 20 MB.',SIGN_IN_REQUIRED:'יש להתחבר שוב לחשבון.',CONNECTION_ERROR:'לא הצלחנו להתחבר לשרת. הפריטים הקיימים לא נמחקו.',CONFIRMATION_MISMATCH:'האימייל שהוקלד אינו תואם לחשבון.',RESET_UNAVAILABLE:'שחזור סיסמה במייל עדיין לא הופעל באתר.',INVALID_CODE:'הקוד שגוי או שפג תוקפו. בקש קוד חדש.'} as Record<string,string>)[code]||'הפעולה נכשלה. נסה שוב.'}
