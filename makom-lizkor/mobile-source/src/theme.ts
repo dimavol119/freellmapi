@@ -1,7 +1,13 @@
 export type ThemeName='halloween'|'classic';
 /** Halloween look is on by default from 20 October to 2 November (local time) every year. */
 export function defaultTheme(now:Date=new Date()):ThemeName{const m=now.getMonth(),d=now.getDate();return (m===9&&d>=20)||(m===10&&d<=2)?'halloween':'classic'}
-export const CLASSIC={bg:'#111113',panel:'#1d1c20',field:'#252329',line:'#343037',text:'#f3ece5',muted:'#a2968c',orange:'#f6a15b',soft:'#3f2c22'};
+/** "Personal archive" look: warm paper, ink text and one terracotta accent (the key keeps its historic name `orange`). */
+export const CLASSIC={bg:'#f3ede3',panel:'#fbf8f2',field:'#fffdf9',line:'#ddd3c3',text:'#1f1a15',muted:'#6b6157',orange:'#a84a22',soft:'#ebe1d2',ink2:'#40372e',side:'#ece4d7'};
+/** Each topic gets a quiet ink colour instead of a symbol. */
+export const TOPIC_COLORS:Record<string,string>={'אישי':'#a84a22','משפחה':'#86506f','עבודה':'#3e5c76','רעיונות':'#9a7424','טיולים':'#4f7356','ימי הולדת':'#9c3d4e','לימודים':'#565b8a'};
+export const topicColor=(name:string)=>TOPIC_COLORS[name]||'#6b6157';
+/** Fonts are hosted with the site (public/fonts); native builds use the system fonts. */
+export const FONTS={serif:'"Frank Ruhl Libre", "Noto Serif Hebrew", Georgia, serif',sans:'Assistant, "Noto Sans Hebrew", system-ui, -apple-system, "Segoe UI", Arial, sans-serif'};
 const HEX=/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 const h2=(n:number)=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0');
 function toHsl(r:number,g:number,b:number):[number,number,number]{r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b),l=(max+min)/2;if(max===min)return [0,0,l];const d=max-min,s=l>0.5?d/(2-max-min):d/(max+min);const h=max===r?(g-b)/d+(g<b?6:0):max===g?(b-r)/d+2:(r-g)/d+4;return [h*60,s,l]}
@@ -22,7 +28,7 @@ export function halloweenColor(input:string):string{
 export const HALLOWEEN=Object.fromEntries(Object.entries(CLASSIC).map(([k,v])=>[k,halloweenColor(v)])) as typeof CLASSIC;
 export const PALETTES:Record<ThemeName,typeof CLASSIC>={classic:CLASSIC,halloween:HALLOWEEN};
 export const ICONS:Record<ThemeName,Record<string,string>>={
-  classic:{'אישי':'✧','משפחה':'♡','עבודה':'▤','רעיונות':'☀','טיולים':'⌖','ימי הולדת':'♧','לימודים':'▣'},
+  classic:{'אישי':'●','משפחה':'●','עבודה':'●','רעיונות':'●','טיולים':'●','ימי הולדת':'●','לימודים':'●'},
   halloween:{'אישי':'👻','משפחה':'🦇','עבודה':'🕸️','רעיונות':'🔮','טיולים':'🏚️','ימי הולדת':'🎂','לימודים':'📜'}
 };
 /** Returns a copy of a style map with every #hex colour value recoloured for the theme. */

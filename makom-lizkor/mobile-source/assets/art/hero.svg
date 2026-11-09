@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420">
+  <defs>
+    <style>.i{stroke:#1F1A15;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;fill:none}.f{stroke:#1F1A15;stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round}</style>
+  </defs>
+  <!-- soft backdrop -->
+  <path d="M70 230C52 150 118 74 214 62c80-10 120 30 196 26 76-4 128 52 118 128-10 80-64 106-120 146-60 42-150 40-222 14C108 352 84 300 70 230Z" fill="#EADFCC"/>
+  <path d="M96 318c40 30 120 48 196 40" class="i" stroke-opacity=".25" stroke-dasharray="2 9"/>
+  <!-- pressed sprig -->
+  <g transform="translate(118 74) rotate(-24)">
+    <path d="M0 0C4 40 6 80 2 120" class="i"/>
+    <path d="M2 22c-16-6-26-2-30 8 14 4 24 2 30-8Z" class="f" fill="#7E9C7E"/>
+    <path d="M3 44c16-8 28-4 32 6-14 6-26 4-32-6Z" class="f" fill="#93AE8E"/>
+    <path d="M3 66c-16-6-26-2-30 8 14 4 24 2 30-8Z" class="f" fill="#7E9C7E"/>
+    <path d="M3 88c16-8 28-4 32 6-14 6-26 4-32-6Z" class="f" fill="#93AE8E"/>
+    <circle cx="0" cy="-6" r="7" class="f" fill="#D88C7A"/>
+  </g>
+  <!-- envelope -->
+  <g transform="translate(36 268) rotate(-9)">
+    <rect x="0" y="0" width="128" height="84" rx="4" class="f" fill="#FBF8F2"/>
+    <path d="M2 4l62 44 62-44" class="i"/>
+    <rect x="92" y="10" width="24" height="28" rx="2" class="f" fill="#D9A441"/>
+    <path d="M98 30c4-8 8-8 12 0" class="i" stroke-width="2"/>
+  </g>
+  <!-- open notebook -->
+  <g transform="translate(150 120) rotate(-4)">
+    <path d="M10 18c50-14 104-12 150 8v196c-46-20-100-22-150-8Z" class="f" fill="#FBF8F2"/>
+    <path d="M160 26c46-20 100-22 150-8v196c-50-14-104-12-150 8Z" class="f" fill="#FFFDF9"/>
+    <path d="M4 26v200c54-14 110-12 156 8 46-20 102-22 156-8V26" class="i"/>
+    <path d="M160 26v208" class="i"/>
+    <g stroke="#1F1A15" stroke-opacity=".28" stroke-width="2.2" stroke-linecap="round" fill="none">
+      <path d="M30 64c36-8 76-8 110 2M30 92c36-8 76-8 110 2M30 120c36-8 60-8 84 0M30 148c36-8 76-8 110 2M30 176c24-6 50-6 70-2"/>
+      <path d="M182 66c34-10 74-10 108-2M182 94c34-10 74-10 108-2M182 122c20-6 44-6 64-2"/>
+    </g>
+    <!-- doodled heart on right page -->
+    <path d="M206 170c-9-14-30-5-19 10l19 16 19-16c11-15-10-24-19-10Z" class="f" fill="#C2592C"/>
+    <!-- ribbon -->
+    <path d="M246 20v236l10-10 10 10V20" class="f" fill="#A84A22"/>
+  </g>
+  <!-- polaroid -->
+  <g transform="translate(372 34) rotate(10)">
+    <rect x="0" y="0" width="132" height="150" rx="4" class="f" fill="#FFFDF9"/>
+    <rect x="12" y="12" width="108" height="100" class="f" fill="#A8C3CF"/>
+    <circle cx="92" cy="40" r="12" fill="#F2C26B" stroke="#1F1A15" stroke-width="2.4"/>
+    <path d="M12 112l30-42 22 26 18-20 38 36Z" class="f" fill="#7E9C7E"/>
+    <path d="M42 70l8 12-8-2-6 8Z" fill="#FBF8F2" stroke="#1F1A15" stroke-width="2"/>
+    <path d="M30 134c16-4 36-4 54 0" class="i" stroke-opacity=".5" stroke-width="2"/>
+    <rect x="46" y="-14" width="44" height="24" rx="2" fill="#D9A441" fill-opacity=".75" transform="rotate(-6 68 -2)"/>
+  </g>
+  <!-- pencil -->
+  <g transform="translate(330 352) rotate(-22)">
+    <path d="M0 0h150l26 13-26 13H0Z" class="f" fill="#D9A441"/>
+    <path d="M150 0v26M0 9h150M0 17h150" class="i" stroke-width="2"/>
+    <path d="M168 9l8 4-8 4Z" fill="#1F1A15"/>
+    <rect x="-24" y="0" width="24" height="26" rx="4" class="f" fill="#D88C7A"/>
+    <path d="M-4 0v26" class="i" stroke-width="2"/>
+  </g>
+  <!-- little marks -->
+  <g class="i" stroke-width="2.4"><path d="M512 236l14-4M508 256l16 4"/><path d="M300 30l2 14M286 36l8 10"/></g>
+</svg>

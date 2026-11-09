@@ -1,5 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {View,Text,Pressable,StyleSheet} from 'react-native';
+import {View,Text,Pressable,StyleSheet,Platform} from 'react-native';
+import {CLASSIC as C,FONTS} from './theme';
+const SERIF=Platform.OS==='web'?FONTS.serif:undefined,SANS=Platform.OS==='web'?FONTS.sans:undefined;
 import {Memory} from './model';
 import {useI18n} from './LanguageProvider';
 import {recoverMemories} from './backup';
@@ -12,7 +14,7 @@ export function BackupPanel({items,user,busy,blocked,onBusy,onSave}:{items:Memor
  useEffect(()=>{setVersions(null);setPreview(null);setMessage('')},[user?.id]);
  const disabled=busy||blocked;
  const action=async(fn:()=>Promise<void>)=>{if(disabled||running.current)return;running.current=true;onBusy(true);setMessage('');try{await fn()}catch(e){setMessage(e instanceof AccountError?accountErrorMessage(e):(e as Error).message==='INVALID_BACKUP'?'זה אינו קובץ גיבוי תקין של מקום לזכור.':(e as Error).message==='BACKUP_TOO_LARGE'?'קובץ הגיבוי או מספר הפריטים גדולים מדי.':(e as Error).name==='AbortError'?'הפעולה בוטלה.':'הפעולה לא הושלמה. הפריטים הקיימים לא נמחקו.')}finally{running.current=false;onBusy(false)}};
- const button=(label:string,fn:()=>Promise<void>,primary=false)=><Pressable accessibilityRole="button" disabled={disabled} onPress={()=>void action(fn)} style={[styles.button,primary&&styles.primary,disabled&&{opacity:.45}]}><Text style={[styles.buttonText,primary&&{color:'#24170d'}]}>{t(label)}</Text></Pressable>;
+ const button=(label:string,fn:()=>Promise<void>,primary=false)=><Pressable accessibilityRole="button" disabled={disabled} onPress={()=>void action(fn)} style={[styles.button,primary&&styles.primary,disabled&&{opacity:.45}]}><Text style={[styles.buttonText,primary&&{color:C.bg}]}>{t(label)}</Text></Pressable>;
  const stage=async(read:()=>Promise<Memory[]|null>)=>{const id=owner.current;const data=await read();if(id!==owner.current)throw new AccountError('SESSION_CHANGED');if(data)setPreview(data)};
  return <View style={styles.panel}>
   <Text style={styles.title}>{t('שמירה וגיבויים')}</Text>
@@ -41,4 +43,4 @@ export function BackupPanel({items,user,busy,blocked,onBusy,onSave}:{items:Memor
   {!!message&&<Text accessibilityLiveRegion="polite" style={styles.message}>{t(message)}</Text>}
  </View>;
 }
-const styles=StyleSheet.create({panel:{backgroundColor:'#202023',borderRadius:14,padding:18,gap:12},title:{color:'#f3ece5',fontSize:19,fontWeight:'700',textAlign:'auto'},text:{color:'#b8adb1',fontSize:14,lineHeight:22,textAlign:'auto'},email:{color:'#f3ece5',textAlign:'left'},button:{backgroundColor:'#302b30',borderRadius:10,padding:13,alignItems:'center'},primary:{backgroundColor:'#f6a15b'},buttonText:{color:'#f3ece5',fontSize:14,fontWeight:'600'},preview:{padding:14,borderWidth:1,borderColor:'#f6a15b',borderRadius:12,gap:12},message:{color:'#f6a15b',fontSize:14,lineHeight:22}});
+const styles=StyleSheet.create({panel:{backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:14,padding:22,gap:12},title:{fontFamily:SERIF,color:C.text,fontSize:21,fontWeight:'700',textAlign:'auto'},text:{fontFamily:SANS,color:C.ink2,fontSize:15,lineHeight:24,textAlign:'auto'},email:{fontFamily:SANS,color:C.text,textAlign:'left',fontSize:15},button:{backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:10,paddingVertical:11,paddingHorizontal:14,alignItems:'center',minHeight:42,justifyContent:'center'},primary:{backgroundColor:C.text,borderColor:C.text},buttonText:{fontFamily:SANS,color:C.text,fontSize:14.5,fontWeight:'600'},preview:{padding:16,borderWidth:1,borderColor:C.orange,borderRadius:12,gap:12,backgroundColor:C.field},message:{fontFamily:SANS,color:C.orange,fontSize:15,lineHeight:23}});
