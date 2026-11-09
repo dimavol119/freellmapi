@@ -491,5 +491,12 @@ Object.assign(translations,{
   "אייפון: ב־Safari לוחצים על כפתור השיתוף ואז על „הוספה למסך הבית”.": {"en": "iPhone: in Safari tap Share, then “Add to Home Screen”.", "ru": "iPhone: в Safari нажмите «Поделиться», затем «На экран „Домой“»."},
   "גלקסי: בתפריט של Chrome או של Samsung Internet בוחרים „התקנת אפליקציה” או „הוספה למסך הבית”.": {"en": "Galaxy: in the Chrome or Samsung Internet menu choose “Install app” or “Add to Home screen”.", "ru": "Galaxy: в меню Chrome или Samsung Internet выберите «Установить приложение» или «Добавить на главный экран»."},
   "מחשב: ב־Chrome או ב־Edge לוחצים על סמל ההתקנה בשורת הכתובת.": {"en": "Computer: in Chrome or Edge click the install icon in the address bar.", "ru": "Компьютер: в Chrome или Edge нажмите значок установки в адресной строке."},
-  "אין חיבור לאינטרנט. הנתונים שמורים בחשבון ויופיעו כשהחיבור יחזור.": {"en": "No internet connection. Your data is safe in your account and will appear when the connection returns.", "ru": "Нет подключения к интернету. Данные хранятся в аккаунте и появятся, когда связь восстановится."}
+  "אין חיבור לאינטרנט. הנתונים שמורים בחשבון ויופיעו כשהחיבור יחזור.": {"en": "No internet connection. Your data is safe in your account and will appear when the connection returns.", "ru": "Нет подключения к интернету. Данные хранятся в аккаунте и появятся, когда связь восстановится."},
+  "מקום לזכור – מקום לתזכורות, רעיונות וימי הולדת. כל אחד פותח חשבון פרטי משלו:": {"en": "A Place to Remember – for reminders, ideas and birthdays. Everyone gets their own private account:", "ru": "Место для воспоминаний — для напоминаний, идей и дней рождения. У каждого свой личный аккаунт:"},
+  "הקישור הועתק. אפשר להדביק ולשלוח לחברים.": {"en": "Link copied. Paste it to send to friends.", "ru": "Ссылка скопирована. Вставьте её, чтобы отправить друзьям."},
+  "לא ניתן לשתף כרגע. הקישור:": {"en": "Sharing is not available right now. The link:", "ru": "Сейчас поделиться нельзя. Ссылка:"},
+  "שליחה לחברים": {"en": "Send to friends", "ru": "Отправить друзьям"},
+  "כל חבר נרשם בעצמו ומקבל חשבון פרטי. אף אחד לא רואה את הפריטים של אחרים.": {"en": "Each friend signs up and gets a private account. No one can see anyone else's items.", "ru": "Каждый друг регистрируется сам и получает личный аккаунт. Никто не видит чужих записей."},
+  "שליחת קישור לאתר": {"en": "Send the site link", "ru": "Отправить ссылку на сайт"},
+  "מקום לזכור": {"en": "A Place to Remember", "ru": "Место для воспоминаний"}
 });

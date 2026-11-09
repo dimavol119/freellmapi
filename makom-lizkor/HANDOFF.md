@@ -1,5 +1,9 @@
 # Makom Lizkor — project handoff (updated 2026-11-09)
 
+## Owner decision (2026-11-09)
+
+For now: **website only**, used by the owner and friends they send the link to. No native app build or store release; the native base (icons, ids, APP-BUILD.md) stays in the code for later and does not affect the site. Settings now has "Send to friends": the phone share sheet (WhatsApp etc.) or copying the link on desktop, explaining that each friend gets their own private account.
+
 ## App base (2026-11-09, third round)
 
 The owner has no native app yet. Zero-cost path:
@@ -38,7 +42,7 @@ No schema change, no migration, no new service, secret or paid API. Server API s
 
 Validation (first round): 32 server tests and 45 client tests pass; TypeScript passes in both projects; Expo web export and server build pass. Local browser QA (wrangler local D1/R2, synthetic `@example.test` accounts, local state deleted afterwards) at 390×844, 412×915 and 1280×900: registration, saving a 12 MB photo (stored 1600×1200), a phone and a desktop session of the same account editing concurrently (CONFLICT → merged, both changes kept), a second account seeing no items/versions of the first (404 on its version), and the close-tab warning. No production data was touched. Real Galaxy/iPhone hardware and native builds were not exercised.
 
-Release: `public/` already contains the new web export (`index-4e97cf4f….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
+Release: `public/` already contains the new web export (`index-2f649a9b….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
 
 ## Storage and recovery update
 
