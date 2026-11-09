@@ -1,4 +1,6 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const {DatabaseSync}=require('node:sqlite');const ts=require('../node_modules/typescript');
+// Tests never reach the network: any test that needs email or OAuth installs its own fetch mock.
+global.fetch=async url=>{throw Error('NETWORK_DISABLED_IN_TESTS '+url)};
 const js=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../lib/account-api.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const loaded={exports:{}};new Function('exports','module','require',js)(loaded.exports,loaded,require);const {handleAccountApi}=loaded.exports;
 function bindings(){const sql=new DatabaseSync(':memory:');sql.exec(fs.readFileSync(path.join(__dirname,'../drizzle/0000_slippery_ghost_rider.sql'),'utf8').replaceAll('--> statement-breakpoint',''));for(const f of fs.readdirSync(path.join(__dirname,'../drizzle')).filter(f=>f.endsWith('.sql')&&!f.startsWith('0000')))sql.exec(fs.readFileSync(path.join(__dirname,'../drizzle',f),'utf8').replaceAll('--> statement-breakpoint',''));const objects=new Map();const DB={async batch(statements){sql.exec('BEGIN');try{const results=[];for(const stmt of statements)results.push(await stmt.run());sql.exec('COMMIT');return results}catch(e){sql.exec('ROLLBACK');throw e}},prepare(query){let args=[];return {bind(...v){args=v;return this},async first(){return sql.prepare(query).get(...args)||null},async run(){return sql.prepare(query).run(...args)}}}};const BUCKET={async put(k,v){objects.set(k,v)},async get(k){return objects.has(k)?{json:async()=>JSON.parse(objects.get(k))}:null},async delete(k){for(const key of Array.isArray(k)?k:[k])objects.delete(key)},async list({prefix='',cursor,limit=1000}={}){const keys=[...objects.keys()].filter(k=>k.startsWith(prefix));return {objects:keys.slice(0,limit).map(key=>({key})),truncated:false}}};return {DB,BUCKET,sql,objects}}
 const req=(path,method='GET',data,cookie,origin)=>new Request('https://app.test/api/'+path,{method,headers:{...(data?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{}),...(origin?{Origin:origin}:{}),'CF-Connecting-IP':'127.0.0.1'},...(data?{body:JSON.stringify(data)}:{})});
@@ -188,4 +190,90 @@ test('signing in over another session ends the previous session token',async()=>
  assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM sessions').get().n,before);
  assert.equal((await (await handleAccountApi(req('auth/session','GET',undefined,a.cookie),env)).json()).user,null,'the old cookie no longer opens the first account');
  const now=await (await handleAccountApi(req('auth/session','GET',undefined,r.headers.get('Set-Cookie')),env)).json();assert.equal(now.user.email,'second@example.com');
+});
+
+// ---- Email verification at registration ----
+function mailEnv(){return {...bindings(),PASSWORD_RESET_ENABLED:'true',PASSWORD_RESET_PROVIDER:'brevo',BREVO_API_KEY:'test-brevo-key',RESET_FROM_EMAIL:'sender@example.com'}}
+function mailbox(status=201){const sent=[];global.fetch=async(url,init)=>{assert.equal(url,'https://api.brevo.com/v3/smtp/email');const mail=JSON.parse(init.body);assert.equal(mail.cc,undefined);assert.equal(mail.bcc,undefined);sent.push({to:mail.to.map(t=>t.email),subject:mail.subject,code:mail.textContent.match(/\d{8}/)[0]});return new Response('{}',{status})};return sent}
+const verify=(env,cookie,code)=>handleAccountApi(req('account/verify','POST',{code},cookie),env);
+
+test('a new account gets a code by email and cannot store anything until it verifies',async()=>{
+ const env=mailEnv(),sent=mailbox();
+ const r=await handleAccountApi(req('auth/register','POST',{email:'New.Person@example.com',password:'Long safe test passphrase!'}),env);assert.equal(r.status,200);
+ const cookie=r.headers.get('Set-Cookie'),user=(await r.json()).user;
+ assert.equal(user.verificationRequired,true);assert.equal(user.emailVerified,false);assert.equal(user.verificationSent,true);
+ assert.equal(sent.length,1);assert.deepEqual(sent[0].to,['new.person@example.com']);assert.match(sent[0].subject,/אימות/);
+ for(const [path,method,data] of [['memories','GET'],['memories','PUT',{items:[note],revision:0}],['backups','GET'],['backups/1','GET']]){const x=await handleAccountApi(req(path,method,data,cookie),env);assert.equal(x.status,403,path);assert.equal((await x.json()).error,'EMAIL_NOT_VERIFIED')}
+ assert.equal(env.objects.size,0,'nothing stored before verification');
+ assert.equal((await (await handleAccountApi(req('auth/session','GET',undefined,cookie),env)).json()).user.verificationRequired,true);
+ assert.equal((await verify(env,cookie,'00000000')).status,400);
+ const ok=await verify(env,cookie,sent[0].code);assert.equal(ok.status,200);const after=(await ok.json()).user;assert.equal(after.emailVerified,true);assert.equal(after.verificationRequired,false);
+ assert.equal((await verify(env,cookie,sent[0].code)).status,400,'a code works once');
+ assert.equal((await handleAccountApi(req('memories','PUT',{items:[note],revision:0},cookie),env)).status,200);
+ assert.equal((await (await handleAccountApi(req('auth/session','GET',undefined,cookie),env)).json()).user.emailVerified,true);
+});
+
+test('verification codes lock after five wrong guesses, can be resent, and belong to one account only',async()=>{
+ const env=mailEnv(),sent=mailbox();
+ const a=await signup(env,'locked@example.com'),b=await signup(env,'other-locked@example.com');
+ const codeA=sent[0].code;
+ assert.equal((await verify(env,b.cookie,codeA)).status,400,"B cannot use A's code");
+ for(let i=0;i<5;i++)assert.equal((await verify(env,a.cookie,String(10000000+i))).status,400);
+ assert.equal((await verify(env,a.cookie,codeA)).status,400,'locked after five wrong guesses');
+ assert.equal((await handleAccountApi(req('account/verify/send','POST',{},a.cookie),env)).status,200);
+ assert.deepEqual(sent.at(-1).to,['locked@example.com']);assert.equal((await verify(env,a.cookie,sent.at(-1).code)).status,200);
+ for(let i=0;i<5;i++)await handleAccountApi(req('account/verify/send','POST',{},b.cookie),env);
+ assert.equal((await handleAccountApi(req('account/verify/send','POST',{},b.cookie),env)).status,429,'resending is rate limited');
+ const expired=env.sql.prepare("UPDATE email_verifications SET expires_at=1").run();assert.ok(expired);
+ assert.equal((await verify(env,b.cookie,sent.at(-1).code)).status,400,'expired codes are refused');
+});
+
+test('a mistyped address can be fixed with the password before verifying, never after',async()=>{
+ const env=mailEnv(),sent=mailbox();
+ const a=await signup(env,'typo@gmial.com');await signup(env,'taken@example.com');
+ const change=(email,password='Long safe test passphrase!')=>handleAccountApi(req('account/email','POST',{email,password},a.cookie),env);
+ assert.equal((await change('typo@gmail.com','Wrong password for sure!')).status,401);
+ assert.equal((await change('taken@example.com')).status,409);
+ const r=await change(' Typo@Gmail.com ');assert.equal(r.status,200);const u=(await r.json()).user;assert.equal(u.email,'typo@gmail.com');assert.equal(u.verificationSent,true);
+ assert.deepEqual(sent.at(-1).to,['typo@gmail.com']);
+ assert.equal((await verify(env,a.cookie,sent[0].code)).status,400,'the code sent to the old address no longer works');
+ assert.equal((await verify(env,a.cookie,sent.at(-1).code)).status,200);
+ assert.equal((await handleAccountApi(req('auth/login','POST',{email:'typo@gmail.com',password:'Long safe test passphrase!'}),env)).status,200);
+ assert.equal((await handleAccountApi(req('auth/login','POST',{email:'typo@gmial.com',password:'Long safe test passphrase!'}),env)).status,401);
+ assert.equal((await change('another@example.com')).status,409,'a verified address cannot be changed this way');
+});
+
+test('registration still works when the email cannot be sent, and accounts are not blocked without email configured',async()=>{
+ const env=mailEnv();mailbox(500);
+ const r=await handleAccountApi(req('auth/register','POST',{email:'nomail@example.com',password:'Long safe test passphrase!'}),env);assert.equal(r.status,200);
+ const user=(await r.json()).user;assert.equal(user.verificationSent,false);assert.equal(user.verificationRequired,true);
+ assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM email_verifications').get().n,0,'an unsent code is discarded');
+ assert.equal((await handleAccountApi(req('account/verify/send','POST',{},r.headers.get('Set-Cookie')),env)).status,502);
+ const plain=bindings(),p=await signup(plain,'plain@example.com');
+ assert.equal(p.data.user.verificationRequired,false);assert.equal((await handleAccountApi(req('memories','PUT',{items:[note],revision:0},p.cookie),plain)).status,200);
+ assert.equal((await handleAccountApi(req('account/verify/send','POST',{},p.cookie),plain)).status,503);
+});
+
+test('accounts from before verification keep working; a completed password reset verifies the address',async()=>{
+ const env=mailEnv(),sent=mailbox();
+ const old=await signup(env,'legacy@example.com');env.sql.prepare("UPDATE accounts SET email_verified_at=0 WHERE email='legacy@example.com'").run();
+ const s=(await (await handleAccountApi(req('auth/session','GET',undefined,old.cookie),env)).json()).user;assert.equal(s.verificationRequired,false);assert.equal(s.emailVerified,false);
+ assert.equal((await handleAccountApi(req('memories','PUT',{items:[note],revision:0},old.cookie),env)).status,200);
+ assert.equal((await handleAccountApi(req('account/email','POST',{email:'x@example.com',password:'Long safe test passphrase!'},old.cookie),env)).status,409);
+ const fresh=await signup(env,'resetter@example.com');
+ assert.equal((await handleAccountApi(req('auth/forgot','POST',{email:'resetter@example.com'}),env)).status,200);
+ assert.equal((await handleAccountApi(req('auth/reset','POST',{email:'resetter@example.com',code:sent.at(-1).code,password:'A brand new long passphrase'}),env)).status,200);
+ const login=await handleAccountApi(req('auth/login','POST',{email:'resetter@example.com',password:'A brand new long passphrase'}),env);
+ const u=(await login.json()).user;assert.equal(u.emailVerified,true);assert.equal(u.verificationRequired,false);assert.ok(fresh);
+});
+
+test('migration 0004 marks existing accounts as not requiring verification and deletion removes pending codes',async()=>{
+ const sql=new DatabaseSync(':memory:');const files=fs.readdirSync(path.join(__dirname,'../drizzle')).filter(f=>f.endsWith('.sql')).sort();
+ for(const f of files.filter(f=>f<'0004'))sql.exec(fs.readFileSync(path.join(__dirname,'../drizzle',f),'utf8').replaceAll('--> statement-breakpoint',''));
+ sql.prepare("INSERT INTO accounts(id,email,salt,password_hash,revision,created_at) VALUES ('u1','before@example.com','s','h',0,1)").run();
+ for(const f of files.filter(f=>f>='0004'))sql.exec(fs.readFileSync(path.join(__dirname,'../drizzle',f),'utf8').replaceAll('--> statement-breakpoint',''));
+ assert.equal(sql.prepare("SELECT email_verified_at v FROM accounts WHERE id='u1'").get().v,0);
+ const env=mailEnv();mailbox();const a=await signup(env,'gone-verify@example.com');
+ assert.equal((await handleAccountApi(req('account/delete','POST',{confirmEmail:'gone-verify@example.com'},a.cookie),env)).status,200,'an unverified account can delete itself');
+ assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM email_verifications').get().n,0);assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM accounts').get().n,0);
 });

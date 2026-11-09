@@ -1,6 +1,6 @@
 import {createRemoteJWKSet,jwtVerify} from 'jose';
 type Bindings={GOOGLE_CLIENT_ID?:string;GOOGLE_CLIENT_SECRET?:string;GOOGLE_SITE_ORIGIN?:string;GOOGLE_LOGIN_ENABLED?:string;DB?:D1Database;BUCKET?:R2Bucket;FACEBOOK_APP_ID?:string;FACEBOOK_APP_SECRET?:string;FACEBOOK_GRAPH_VERSION?:string;FACEBOOK_SITE_ORIGIN?:string;FACEBOOK_LOGIN_ENABLED?:string;PASSWORD_RESET_ENABLED?:string;PASSWORD_RESET_PROVIDER?:string;BREVO_API_KEY?:string;RESEND_API_KEY?:string;RESET_FROM_EMAIL?:string};
-type Account={id:string;email:string;salt:string;password_hash:string;workspace_key:string|null;revision:number;session_expires?:number};
+type Account={id:string;email:string;salt:string;password_hash:string;workspace_key:string|null;revision:number;session_expires?:number;email_verified_at?:number|null};
 const encoder=new TextEncoder();const LIMIT=20*1024*1024;
 const hex=(bytes:ArrayBuffer|Uint8Array)=>Array.from(bytes instanceof Uint8Array?bytes:new Uint8Array(bytes)).map(v=>v.toString(16).padStart(2,'0')).join('');
 const random=()=>hex(crypto.getRandomValues(new Uint8Array(32)));
@@ -28,13 +28,31 @@ function resetConfig(b:Bindings):ResetConfig|null{
 }
 const resetHash=(email:string,code:string)=>hash('reset:'+email+':'+code);
 function resetCode(){return String(crypto.getRandomValues(new Uint32Array(1))[0]%100000000).padStart(8,'0')}
+const VERIFY_TTL=1800000;
+const verifyHash=(id:string,email:string,code:string)=>hash('verify:'+id+':'+email+':'+code);
+/** email_verified_at: NULL = new account waiting for its code, 0 = created before verification existed (not required), >0 = verified. */
+const verificationRequired=(account:Account,bindings:Bindings)=>account.email_verified_at===null&&!!resetConfig(bindings);
+const userView=(account:Account,bindings:Bindings)=>({id:account.id,email:account.email,emailVerified:(account.email_verified_at||0)>0,verificationRequired:verificationRequired(account,bindings)});
+async function sendVerification(db:D1Database,config:ResetConfig,account:{id:string;email:string}){
+ const code=resetCode(),codeHash=await verifyHash(account.id,account.email,code);
+ await db.prepare('INSERT INTO email_verifications(user_id,email,code_hash,attempts,expires_at) VALUES (?,?,?,0,?) ON CONFLICT(user_id) DO UPDATE SET email=excluded.email,code_hash=excluded.code_hash,attempts=0,expires_at=excluded.expires_at').bind(account.id,account.email,codeHash,Date.now()+VERIFY_TTL).run();
+ const subject='קוד לאימות האימייל · מקום לזכור',text='קוד האימות שלך: '+code+'\nהקוד תקף ל־30 דקות. אם לא נרשמת למקום לזכור, אפשר להתעלם מהודעה זו.\n\nYour email verification code: '+code+' (valid for 30 minutes). If you did not sign up, ignore this email.';
+ const sent=await sendEmail(config,account.email,subject,text).catch(()=>false);
+ if(!sent){console.error('verification email failed');await db.prepare('DELETE FROM email_verifications WHERE user_id=? AND code_hash=?').bind(account.id,codeHash).run()}
+ return sent;
+}
+async function sendEmail(config:ResetConfig,to:string,subject:string,text:string){
+ const brevo=config.provider==='brevo';
+ const r=await fetch(brevo?'https://api.brevo.com/v3/smtp/email':'https://api.resend.com/emails',{method:'POST',headers:brevo?{'api-key':config.key,'Content-Type':'application/json'}:{Authorization:'Bearer '+config.key,'Content-Type':'application/json'},body:JSON.stringify(brevo?{sender:{name:'מקום לזכור',email:config.from},to:[{email:to}],subject,textContent:text}:{from:config.from,to:[to],subject,text}),signal:AbortSignal.timeout(15000)});
+ return r.ok;
+}
 async function sendResetEmail(config:ResetConfig,to:string,code:string){
  const subject='קוד לשחזור סיסמה · מקום לזכור',text='קוד השחזור שלך: '+code+'\nהקוד תקף ל־15 דקות. אם לא ביקשת לשחזר סיסמה, אפשר להתעלם מהודעה זו.\n\nYour password reset code: '+code+' (valid for 15 minutes). If you did not request this, ignore this email.';
  const brevo=config.provider==='brevo';
  const r=await fetch(brevo?'https://api.brevo.com/v3/smtp/email':'https://api.resend.com/emails',{method:'POST',headers:brevo?{'api-key':config.key,'Content-Type':'application/json'}:{Authorization:'Bearer '+config.key,'Content-Type':'application/json'},body:JSON.stringify(brevo?{sender:{name:'מקום לזכור',email:config.from},to:[{email:to}],subject,textContent:text}:{from:config.from,to:[to],subject,text}),signal:AbortSignal.timeout(15000)});
  return r.ok;
 }
-async function purgeExpired(db:D1Database){const ms=Date.now(),sec=Math.floor(ms/1000);await db.batch([db.prepare('DELETE FROM sessions WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(sec),db.prepare('DELETE FROM facebook_states WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM google_states WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM password_resets WHERE expires_at<?').bind(ms)])}
+async function purgeExpired(db:D1Database){const ms=Date.now(),sec=Math.floor(ms/1000);await db.batch([db.prepare('DELETE FROM sessions WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(sec),db.prepare('DELETE FROM facebook_states WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM google_states WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM password_resets WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM email_verifications WHERE expires_at<?').bind(ms)])}
 async function deleteUserObjects(id:string,bucket:R2Bucket){
  const prefix='users/'+id+'/';let cursor:string|undefined;
  do{const page=await bucket.list({prefix,cursor,limit:500});if(page.objects.length)await bucket.delete(page.objects.map(o=>o.key));cursor=page.truncated?page.cursor:undefined}while(cursor);
@@ -43,15 +61,15 @@ async function revisionMoved(db:D1Database,account:Account){const row=await db.p
 async function deleteAccountData(account:Account,db:D1Database,bucket:R2Bucket){
  await deleteUserObjects(account.id,bucket);
  if(account.workspace_key)await bucket.delete(account.workspace_key);
- await db.batch([db.prepare('DELETE FROM sessions WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM facebook_states WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM google_states WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM facebook_identities WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM google_identities WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM rate_limits WHERE key LIKE ? OR key LIKE ?').bind('save:'+account.id+':%','delete:'+account.id+':%'),db.prepare('DELETE FROM password_resets WHERE email=?').bind(account.email),db.prepare('DELETE FROM accounts WHERE id=?').bind(account.id)]);
+ await db.batch([db.prepare('DELETE FROM sessions WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM facebook_states WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM google_states WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM facebook_identities WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM google_identities WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM rate_limits WHERE key LIKE ? OR key LIKE ?').bind('save:'+account.id+':%','delete:'+account.id+':%'),db.prepare('DELETE FROM password_resets WHERE email=?').bind(account.email),db.prepare('DELETE FROM email_verifications WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM accounts WHERE id=?').bind(account.id)]);
  // A save that was already in flight may have written after the first sweep. The account row is gone now, so no new
  // save can succeed; sweep once more so no copy of the deleted user's data stays behind.
  await deleteUserObjects(account.id,bucket).catch(()=>console.error('account cleanup sweep failed'));
 }
 async function authenticated(request:Request,db:D1Database){const token=request.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!token)return null;return db.prepare('SELECT a.*,s.expires_at AS session_expires FROM accounts a JOIN sessions s ON s.user_id=a.id WHERE s.token_hash=? AND s.expires_at>?').bind(await hash(token),Date.now()).first<Account>()}
-async function startSession(account:Account,db:D1Database,secure:boolean,request?:Request){const token=random();
+async function startSession(account:Account,db:D1Database,secure:boolean,request?:Request,view:Record<string,unknown>={id:account.id,email:account.email}){const token=random();
  // Signing in over another session in this browser ends that session, so its token does not stay valid in the database.
- const previous=request?.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(previous)await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(previous)).run();await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)').bind(await hash(token),account.id,Date.now()+SESSION_TTL).run();return json({user:{id:account.id,email:account.email}},200,sessionCookie(token,secure))}
+ const previous=request?.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(previous)await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(previous)).run();await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)').bind(await hash(token),account.id,Date.now()+SESSION_TTL).run();return json({user:view},200,sessionCookie(token,secure))}
 const historyPrefix=(id:string)=>'users/'+id+'/history/';
 const historyKey=(id:string,revision:number)=>historyPrefix(id)+String(revision).padStart(16,'0')+'.json';
 async function historyVersions(bucket:R2Bucket,id:string){
@@ -80,13 +98,16 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
    if(weakPassword(password,email))return json({error:'WEAK_PASSWORD'},400);
    if(!await rate(db,'signup:'+await hash(ip),5,3600))return json({error:'TOO_MANY_ATTEMPTS'},429);
    if(existing)return json({error:'EMAIL_IN_USE'},409);const salt=random(),id=crypto.randomUUID(),derived=await passwordHash(password,salt);
-   try{await db.prepare('INSERT INTO accounts(id,email,salt,password_hash,revision,created_at) VALUES (?,?,?,?,0,?)').bind(id,email,salt,derived,Date.now()).run()}catch(e){if(String(e).includes('UNIQUE'))return json({error:'EMAIL_IN_USE'},409);throw e}
-   return await startSession({id,email,salt,password_hash:derived,workspace_key:null,revision:0},db,secure,request);
+   try{await db.prepare('INSERT INTO accounts(id,email,salt,password_hash,revision,created_at,email_verified_at) VALUES (?,?,?,?,0,?,NULL)').bind(id,email,salt,derived,Date.now()).run()}catch(e){if(String(e).includes('UNIQUE'))return json({error:'EMAIL_IN_USE'},409);throw e}
+   const created:Account={id,email,salt,password_hash:derived,workspace_key:null,revision:0,email_verified_at:null};
+   // Registration succeeds even if the email cannot be sent right now; the user can ask for a new code.
+   const config=resetConfig(bindings),verificationSent=config?await sendVerification(db,config,created):false;
+   return await startSession(created,db,secure,request,{...userView(created,bindings),verificationSent});
   }
   // Per-account limit on failed sign-ins, in addition to the per-IP limit, so changing IP does not allow unlimited guessing.
   if(await loginFailures(db,email)>=LOGIN_FAILURES)return json({error:'TOO_MANY_ATTEMPTS'},429);
   const derived=await passwordHash(password,existing?.salt||'00000000000000000000000000000000');if(!existing||!same(derived,existing.password_hash)){await rate(db,'login-fail:'+await hash(email),LOGIN_FAILURES,LOGIN_WINDOW);return json({error:'INVALID_LOGIN'},401)}
-  return await startSession(existing,db,secure,request);
+  return await startSession(existing,db,secure,request,userView(existing,bindings));
  }
  if(path==='/api/auth/forgot'||path==='/api/auth/reset'){
   if(request.method!=='POST')return json({error:'METHOD'},405);
@@ -111,7 +132,9 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   const salt=random(),derived=await passwordHash(password,salt);
   const consumed=await db.prepare('DELETE FROM password_resets WHERE email=? AND code_hash=? AND attempts<=5 AND expires_at>? RETURNING email').bind(email,attempt.code_hash,Date.now()).first<{email:string}>();
   if(!consumed)return json({error:'INVALID_CODE'},400);
-  await db.batch([db.prepare('UPDATE accounts SET salt=?,password_hash=? WHERE id=?').bind(salt,derived,owner.id),db.prepare('DELETE FROM sessions WHERE user_id=?').bind(owner.id),db.prepare('DELETE FROM password_resets WHERE email=?').bind(email)]);
+  await db.batch([db.prepare('UPDATE accounts SET salt=?,password_hash=? WHERE id=?').bind(salt,derived,owner.id),db.prepare('DELETE FROM sessions WHERE user_id=?').bind(owner.id),db.prepare('DELETE FROM password_resets WHERE email=?').bind(email),
+   // A completed reset proves the person controls this address.
+   db.prepare('UPDATE accounts SET email_verified_at=? WHERE id=? AND (email_verified_at IS NULL OR email_verified_at=0)').bind(Date.now(),owner.id),db.prepare('DELETE FROM email_verifications WHERE user_id=?').bind(owner.id)]);
   return json({ok:true});
  }
  const account=await authenticated(request,db);
@@ -120,15 +143,47 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   const token=request.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];
   if(account&&token&&typeof account.session_expires==='number'&&account.session_expires-Date.now()<SESSION_RENEW_BELOW){
    const renewed=await db.prepare('UPDATE sessions SET expires_at=? WHERE token_hash=? AND user_id=? RETURNING expires_at').bind(Date.now()+SESSION_TTL,await hash(token),account.id).first().catch(()=>null);
-   if(renewed)return json({user:{id:account.id,email:account.email}},200,sessionCookie(token,secure));
+   if(renewed)return json({user:userView(account,bindings)},200,sessionCookie(token,secure));
   }
-  return json({user:account?{id:account.id,email:account.email}:null});
+  return json({user:account?userView(account,bindings):null});
  }
  if(!account)return json({error:'SIGN_IN_REQUIRED'},401);
  // A cookie may change in another tab. Never apply the old tab's data to the new account.
  const expectedUser=request.headers.get('X-Makom-User');
  if(expectedUser&&expectedUser!==account.id)return json({error:'SESSION_CHANGED'},409);
  if(path==='/api/auth/logout'&&request.method==='POST'){const token=request.headers.get('Cookie')?.match(/makom_session=([a-f0-9]{64})/)?.[1];if(token)await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(token)).run();return json({ok:true},200,sessionCookie('',secure,0))}
+ if(path==='/api/account/verify/send'&&request.method==='POST'){
+  const config=resetConfig(bindings);if(!config)return json({error:'VERIFY_UNAVAILABLE'},503);
+  if((account.email_verified_at||0)>0)return json({ok:true,user:userView(account,bindings)});
+  if(!await rate(db,'verify-send:'+account.id,5,3600))return json({error:'TOO_MANY_ATTEMPTS'},429);
+  if(!await sendVerification(db,config,account))return json({error:'EMAIL_SEND_FAILED'},502);
+  return json({ok:true});
+ }
+ if(path==='/api/account/verify'&&request.method==='POST'){
+  if(!await rate(db,'verify-try:'+account.id,20))return json({error:'TOO_MANY_ATTEMPTS'},429);
+  const data=await body(request),code=typeof data.code==='string'?data.code.trim():'';
+  if(!/^\d{8}$/.test(code))return json({error:'INVALID_CODE'},400);
+  const attempt=await db.prepare('UPDATE email_verifications SET attempts=attempts+1 WHERE user_id=? AND expires_at>? RETURNING code_hash,attempts,email').bind(account.id,Date.now()).first<{code_hash:string;attempts:number;email:string}>();
+  if(!attempt||attempt.attempts>5||attempt.email!==account.email||!same(await verifyHash(account.id,account.email,code),attempt.code_hash))return json({error:'INVALID_CODE'},400);
+  const at=Date.now();
+  await db.batch([db.prepare('UPDATE accounts SET email_verified_at=? WHERE id=? AND email=?').bind(at,account.id,account.email),db.prepare('DELETE FROM email_verifications WHERE user_id=?').bind(account.id)]);
+  return json({ok:true,user:userView({...account,email_verified_at:at},bindings)});
+ }
+ if(path==='/api/account/email'&&request.method==='POST'){
+  // Only a new account that has not verified yet may fix a mistyped address; it must confirm its password.
+  if(account.email_verified_at!==null)return json({error:'EMAIL_ALREADY_VERIFIED'},409);
+  if(!await rate(db,'email-change:'+account.id,5,3600))return json({error:'TOO_MANY_ATTEMPTS'},429);
+  const data=await body(request),email=typeof data.email==='string'?data.email.trim().toLowerCase():'',password=typeof data.password==='string'?data.password:'';
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||password.length<12||password.length>128)return json({error:'INVALID_CREDENTIAL_FORMAT'},400);
+  if(!same(await passwordHash(password,account.salt),account.password_hash))return json({error:'INVALID_LOGIN'},401);
+  if(email!==account.email){
+   if(await db.prepare('SELECT id FROM accounts WHERE email=?').bind(email).first())return json({error:'EMAIL_IN_USE'},409);
+   try{const changed=await db.prepare('UPDATE accounts SET email=? WHERE id=? AND email_verified_at IS NULL RETURNING id').bind(email,account.id).first();if(!changed)return json({error:'EMAIL_ALREADY_VERIFIED'},409)}catch(e){if(String(e).includes('UNIQUE'))return json({error:'EMAIL_IN_USE'},409);throw e}
+   await db.batch([db.prepare('DELETE FROM password_resets WHERE email=?').bind(account.email),db.prepare('DELETE FROM email_verifications WHERE user_id=?').bind(account.id)]);
+  }
+  const updated={...account,email},config=resetConfig(bindings),verificationSent=config?await sendVerification(db,config,updated):false;
+  return json({ok:true,user:{...userView(updated,bindings),verificationSent}});
+ }
  if(path==='/api/account/delete'&&request.method==='POST'){
   if(!await rate(db,'delete:'+account.id,5))return json({error:'TOO_MANY_ATTEMPTS'},429);
   const data=await body(request);
@@ -136,6 +191,8 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   await deleteAccountData(account,db,bucket);
   return json({ok:true},200,sessionCookie('',secure,0));
  }
+ // Until a new account confirms its email, it can only verify, fix the address, sign out or delete itself.
+ if(verificationRequired(account,bindings))return json({error:'EMAIL_NOT_VERIFIED'},403);
  if(path==='/api/memories'&&request.method==='GET'){
   if(!account.workspace_key)return json({items:[],revision:account.revision});const object=await bucket.get(account.workspace_key);if(!object)return json({error:'STORAGE_UNAVAILABLE'},503);return json({items:await object.json(),revision:account.revision});
  }
@@ -302,7 +359,8 @@ async function googleApi(request:Request,bindings:Bindings):Promise<Response>{
    if(await db.prepare('SELECT id FROM accounts WHERE email=?').bind(email).first())return finish('sign_in_to_link');
    const id=crypto.randomUUID(),salt=random(),derived=await passwordHash(random(),salt);
    await db.batch([
-    db.prepare('INSERT INTO accounts(id,email,salt,password_hash,revision,created_at) VALUES (?,?,?,?,0,?)').bind(id,email,salt,derived,Date.now()),
+    // Google has already verified this address (verifyGoogleIdentity requires email_verified).
+    db.prepare('INSERT INTO accounts(id,email,salt,password_hash,revision,created_at,email_verified_at) VALUES (?,?,?,?,0,?,?)').bind(id,email,salt,derived,Date.now(),Date.now()),
     db.prepare('INSERT INTO google_identities(google_id,user_id) VALUES (?,?)').bind(profile.id,id)
    ]);
    account={id,email,salt,password_hash:derived,revision:0,workspace_key:null};

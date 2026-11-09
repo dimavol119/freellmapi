@@ -72,3 +72,13 @@ test('the installable-app service worker never handles account requests',()=>{
  assert.equal(handled('https://app.test/api/memories','PUT'),false);assert.equal(handled('https://app.test/','POST','navigate'),false);assert.equal(handled('https://other.test/x.js'),false);
  assert.equal(handled('https://app.test/','GET','navigate'),true);assert.equal(handled('https://app.test/_expo/static/js/web/index-1.js'),true);assert.equal(handled('https://app.test/icon-192.png'),true);
 });
+test('email verification requests carry the account, validate input first and map errors to Hebrew',async()=>{const original=global.fetch;const calls=[];
+ global.fetch=async(url,init)=>{calls.push({url,method:init.method,body:init.body&&JSON.parse(init.body),user:init.headers['X-Makom-User']});if(url.endsWith('auth/session'))return Response.json({user:{id:'u1',email:'a@example.com',verificationRequired:true}});if(url.endsWith('account/verify'))return Response.json({ok:true,user:{id:'u1',email:'a@example.com',emailVerified:true,verificationRequired:false}});if(url.endsWith('account/email'))return Response.json({ok:true,user:{id:'u1',email:'fixed@gmail.com',verificationRequired:true,verificationSent:true}});return Response.json({error:'EMAIL_SEND_FAILED'},{status:502})};
+ try{const a=service();const s=await a.session();assert.equal(s.user.verificationRequired,true);
+  await assert.rejects(a.verifyEmail('12ab'),e=>e.code==='INVALID_CODE');assert.equal(calls.length,1,'a malformed code sends nothing');
+  const v=await a.verifyEmail(' 12345678 ');assert.equal(v.emailVerified,true);assert.deepEqual(calls.at(-1).body,{code:'12345678'});assert.equal(calls.at(-1).user,'u1');
+  await assert.rejects(a.changeUnverifiedEmail('not-an-email','Long safe test passphrase!'),e=>/אימייל/.test(e.code));
+  const u=await a.changeUnverifiedEmail(' Fixed@Gmail.com ','Long safe test passphrase!');assert.equal(u.email,'fixed@gmail.com');assert.deepEqual(calls.at(-1).body,{email:'fixed@gmail.com',password:'Long safe test passphrase!'});
+  await assert.rejects(a.sendVerificationCode(),e=>e.code==='EMAIL_SEND_FAILED');
+  for(const code of ['EMAIL_NOT_VERIFIED','VERIFY_UNAVAILABLE','EMAIL_SEND_FAILED','EMAIL_ALREADY_VERIFIED'])assert.match(a.accountErrorMessage(new a.AccountError(code)),/[֐-׿]/,code);
+ }finally{global.fetch=original}});

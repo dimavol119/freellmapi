@@ -1,5 +1,19 @@
 # Makom Lizkor — project handoff (updated 2026-11-09)
 
+## Email verification at registration (2026-11-09, fifth round)
+
+**Deploy step: apply `drizzle/0004_email_verification.sql` to production D1 before (or together with) the new server build.** It adds `accounts.email_verified_at` and the `email_verifications` table and sets existing accounts to 0. Migrations 0000–0003 are unchanged; 0004 and its snapshot were generated with drizzle-kit (plus the UPDATE line).
+
+- `email_verified_at`: NULL = new account waiting for its code; 0 = existed before verification (never blocked, can verify voluntarily in settings); >0 = verified.
+- Uses the existing password-reset email config (Brevo free tier); no new secret. Without that config nothing is blocked.
+- Registration sends an 8-digit code (30 min, 5 tries, resend 5/hour). Registration succeeds even if sending fails (`verificationSent:false`, code discarded, "send a new code").
+- Until verified (and email configured), only `/api/account/verify`, `/verify/send`, `/account/email` (fix a typo, password required, only while unverified), logout and account deletion work; everything else returns 403 `EMAIL_NOT_VERIFIED`.
+- Google-created accounts are verified; a completed password reset marks the address verified. Codes are bound to account id and address; changing the address invalidates the old code.
+- Session/register/login responses include `emailVerified`, `verificationRequired`.
+- Server tests no longer reach the network (`fetch` is blocked by default in `tests/accounts.test.cjs`).
+
+Validation: 43 server tests, 50 client tests, both TypeScript checks, web export and server build pass. Playwright (iPhone 13) against local wrangler with migration 0004 and email "enabled" but outbound mail blocked by this environment (a known code was planted in local D1 to stand in for the email): register with a typo → verification screen, "New" disabled, `/api/memories` 403 → fix the address via suggestion + password → wrong code refused → right code verifies → first item saved → no screen after reload → "✓ verified" in settings. Real email delivery through Brevo was not exercised here.
+
 ## Owner decision (2026-11-09)
 
 For now: **website only**, used by the owner and friends they send the link to. No native app build or store release; the native base (icons, ids, APP-BUILD.md) stays in the code for later and does not affect the site. Settings now has "Send to friends": the phone share sheet (WhatsApp etc.) or copying the link on desktop, explaining that each friend gets their own private account.
@@ -42,7 +56,7 @@ No schema change, no migration, no new service, secret or paid API. Server API s
 
 Validation (first round): 32 server tests and 45 client tests pass; TypeScript passes in both projects; Expo web export and server build pass. Local browser QA (wrangler local D1/R2, synthetic `@example.test` accounts, local state deleted afterwards) at 390×844, 412×915 and 1280×900: registration, saving a 12 MB photo (stored 1600×1200), a phone and a desktop session of the same account editing concurrently (CONFLICT → merged, both changes kept), a second account seeing no items/versions of the first (404 on its version), and the close-tab warning. No production data was touched. Real Galaxy/iPhone hardware and native builds were not exercised.
 
-Release: `public/` already contains the new web export (`index-2f649a9b….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
+Release: `public/` already contains the new web export (`index-6ee03e42….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
 
 ## Storage and recovery update
 
@@ -115,7 +129,7 @@ Copy `web-export/` contents into `public/`, and copy its index.html to both publ
 ## Known limits / follow-up
 
 - Tests use local data and mock mail/OAuth, not real owners' passwords. No claim of end-to-end Google consent or real iPhone/Galaxy validation in this audit.
-- Registration does not yet verify email ownership. Do not auto-link OAuth accounts merely because email strings match. Existing email users sign in first, then link Google in settings.
+- Registration verifies email ownership when email sending is configured (see above). Do not auto-link OAuth accounts merely because email strings match. Existing email users sign in first, then link Google in settings.
 - Native store packages and Apple/SMS login are not released/configured.
 - Web reminders export calendar events; no closed-browser web push.
 - No account-to-account sharing. Google Drive/iCloud backup uses manual file export/share, not automatic sync.
