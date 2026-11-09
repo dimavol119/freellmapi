@@ -1,4 +1,20 @@
-# Makom Lizkor — project handoff (2026-11-04)
+# Makom Lizkor — project handoff (updated 2026-11-09)
+
+## Reliability update (2026-11-09)
+
+Fixes found by code review and reproduced with tests (each new test fails on the previous code):
+
+- **No-op saves no longer consume history.** On phones, saving an item with a reminder (and "done") saves twice; the second save is identical once the device-only `notificationScheduled` flag is stripped, yet it created a new revision and pushed a real version out of the three kept. Now the client skips a save whose account content is unchanged (`sameList` in `merge.ts`), and the server returns the current revision without writing when the content is identical (`unchanged:true`). An empty first save creates nothing.
+- **Race between devices returns CONFLICT, not a storage error.** If another device saved between reading the account row and reading the previous workspace object, the server returned 503 `STORAGE_UNAVAILABLE` and the client did not merge. The server now re-checks the revision and returns 409 `CONFLICT`, so the existing merge-and-retry runs. A genuinely missing workspace still refuses to overwrite (503).
+- **Account deletion sweeps storage again after removing the account row,** so an in-flight save cannot leave a copy of a deleted user's data behind.
+- **Phone photos are scaled down in the browser** (`services/images.ts`, `image-size.ts`): longest side 1600 px, JPEG 0.82, only for images over 400 KB; GIFs kept; on any decode failure the original is kept. A 12 MB 4032×3024 photo became ~0.75 MB; before, one or two photos could reach the 20 MB account limit. Existing stored images are not modified. Native (Expo app) image picking is unchanged — not testable here.
+- **Web: warning before closing/reloading the tab** while a save is running or the editor holds unsaved text (`beforeunload`). Nothing is written to device storage for this, so no account data touches the shared device.
+
+No schema change, no migration, no new service, secret or paid API. Server API stays backward compatible (`unchanged` is an extra field).
+
+Validation: 32 server tests and 45 client tests pass; TypeScript passes in both projects; Expo web export and server build pass. Local browser QA (wrangler local D1/R2, synthetic `@example.test` accounts, local state deleted afterwards) at 390×844, 412×915 and 1280×900: registration, saving a 12 MB photo (stored 1600×1200), a phone and a desktop session of the same account editing concurrently (CONFLICT → merged, both changes kept), a second account seeing no items/versions of the first (404 on its version), and the close-tab warning. No production data was touched. Real Galaxy/iPhone hardware and native builds were not exercised.
+
+Release: `public/` already contains the new web export (`index-981d87f9….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
 
 ## Storage and recovery update
 

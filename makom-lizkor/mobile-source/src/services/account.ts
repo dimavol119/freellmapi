@@ -1,10 +1,12 @@
 import {Platform} from 'react-native';
 import {Memory} from '../model';
 import {portableMemories} from './export';
-import {saveWithMerge} from '../merge';
+import {saveWithMerge,sameList} from '../merge';
 import {credentialsError,emailError,passwordError} from '../auth-validation';
 export type User={id:string;email:string};
-let revision=0;let synced:Memory[]=[];let loaded=false;let epoch=0;let saving=false;let activeUserId:string|null=null;const norm=(i:Memory):Memory=>({...i,notificationScheduled:false});
+let revision=0;let synced:Memory[]=[];let loaded=false;let epoch=0;let saving=false;
+/** True while a save to the account is in flight (used to warn before closing the page). */
+export const isSaving=()=>saving;let activeUserId:string|null=null;const norm=(i:Memory):Memory=>({...i,notificationScheduled:false});
 const base=Platform.OS==='web'?'':(process.env.EXPO_PUBLIC_API_URL||'https://makom-lizkor-dima.dimavol11.chatgpt.site');export const privacyUrl=base+'/privacy.html';
 export class AccountError extends Error{constructor(public code:string){super(code)}}
 async function api(path:string,method='GET',data?:unknown){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);try{const r=await fetch(base+'/api/'+path,{method,credentials:'include',headers:{...(data?{'Content-Type':'application/json'}:{}),...(activeUserId?{'X-Makom-User':activeUserId}:{})},body:data?JSON.stringify(data):undefined,signal:controller.signal});const result=await r.json();if(!r.ok)throw new AccountError(result.error||'SERVER_ERROR');return result;}catch(e){if(e instanceof AccountError)throw e;throw new AccountError('CONNECTION_ERROR')}finally{clearTimeout(timer)}}
@@ -26,6 +28,8 @@ export async function saveCloudMemories(items:Memory[]):Promise<Memory[]>{
  const check=()=>{if(expected!==activeUserId||stamp!==epoch)throw new AccountError('SESSION_CHANGED')};
  try{
   const mine=(await portableMemories(items)).map(norm);check();
+  // Nothing changed for the account (e.g. only this device's notification flag): no request, no new revision.
+  if(sameList(mine,baseItems))return items;
   const result=await saveWithMerge({mine,base:baseItems,put:async list=>{check();const data=await api('memories','PUT',{items:list,revision:expectedRevision});check();expectedRevision=data.revision},latest:async()=>{check();const data=await api('memories');check();expectedRevision=data.revision;return data.items.map(norm)},isConflict:e=>e instanceof AccountError&&e.code==='CONFLICT'});
   check();revision=expectedRevision;synced=result.items;return result.merged?result.items:items;
  }finally{saving=false}

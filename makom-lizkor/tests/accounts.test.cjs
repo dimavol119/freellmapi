@@ -98,3 +98,47 @@ test('simultaneous resets cannot reuse the same code',async()=>{const env=resetE
 
 test('Brevo sends the reset code only to the requesting account, without CC or BCC',async()=>{const env={...bindings(),PASSWORD_RESET_ENABLED:'true',PASSWORD_RESET_PROVIDER:'brevo',BREVO_API_KEY:'test-brevo-key',RESET_FROM_EMAIL:'sender@example.com'};await signup(env,'recipient@example.com');let code;const original=global.fetch;global.fetch=async(url,init)=>{assert.equal(url,'https://api.brevo.com/v3/smtp/email');assert.equal(init.headers['api-key'],'test-brevo-key');const mail=JSON.parse(init.body);assert.deepEqual(mail.sender,{name:'מקום לזכור',email:'sender@example.com'});assert.deepEqual(mail.to,[{email:'recipient@example.com'}]);assert.equal(mail.cc,undefined);assert.equal(mail.bcc,undefined);assert.equal(mail.replyTo,undefined);code=mail.textContent.match(/\d{8}/)[0];return new Response('{"messageId":"test"}',{status:201})};try{assert.equal((await handleAccountApi(req('auth/forgot','POST',{email:'recipient@example.com'}),env)).status,200);assert.equal((await handleAccountApi(req('auth/reset','POST',{email:'recipient@example.com',code,password:'Replacement password only!'}),env)).status,200)}finally{global.fetch=original}});
 test('Brevo reset stays unavailable without configuration and discards codes when sending fails',async()=>{const env={...bindings(),PASSWORD_RESET_PROVIDER:'brevo',BREVO_API_KEY:'test-brevo-key',RESET_FROM_EMAIL:'sender@example.com'};assert.equal((await handleAccountApi(req('auth/forgot','POST',{email:'recipient@example.com'}),env)).status,503);env.PASSWORD_RESET_ENABLED='true';const key=env.BREVO_API_KEY;delete env.BREVO_API_KEY;assert.equal((await handleAccountApi(req('auth/forgot','POST',{email:'recipient@example.com'}),env)).status,503);env.BREVO_API_KEY=key;await signup(env,'failure@example.com');const original=global.fetch;global.fetch=async()=>new Response('{}',{status:429});try{assert.equal((await handleAccountApi(req('auth/forgot','POST',{email:'failure@example.com'}),env)).status,200);assert.equal(env.sql.prepare('SELECT count(*) n FROM password_resets').get().n,0)}finally{global.fetch=original}});
+
+test('an identical save keeps the revision and never pushes a real version out of history',async()=>{
+ const env=bindings(),a=await signup(env,'noop@example.com');
+ const put=async(items,revision)=>{const r=await handleAccountApi(req('memories','PUT',{items,revision},a.cookie),env);assert.equal(r.status,200);return (await r.json()).revision};
+ assert.equal(await put([],0),0,'an empty first save creates nothing');
+ let rev=await put([{...note,title:'v1'}],0);assert.equal(rev,1);
+ rev=await put([{...note,title:'v2'}],rev);rev=await put([{...note,title:'v3'}],rev);assert.equal(rev,3);
+ // e.g. the second save after a device schedules a reminder: same content once the device flag is stripped
+ for(let i=0;i<4;i++)assert.equal(await put([{...note,title:'v3'}],rev),3);
+ const versions=await (await handleAccountApi(req('backups','GET',undefined,a.cookie),env)).json();assert.deepEqual(versions.versions,[2,1]);
+ const old=await (await handleAccountApi(req('backups/1','GET',undefined,a.cookie),env)).json();assert.equal(old.items[0].title,'v1');
+ const current=await (await handleAccountApi(req('memories','GET',undefined,a.cookie),env)).json();assert.equal(current.revision,3);assert.equal(current.items[0].title,'v3');
+});
+
+test('a save racing another device gets CONFLICT (so the client merges) instead of a storage error',async()=>{
+ const env=bindings(),a=await signup(env,'race@example.com');
+ assert.equal((await handleAccountApi(req('memories','PUT',{items:[{...note,title:'base'}],revision:0},a.cookie),env)).status,200);
+ const originalGet=env.BUCKET.get;let raced=false;
+ env.BUCKET.get=async k=>{if(!raced&&!k.includes('/history/')){raced=true;const other=await handleAccountApi(req('memories','PUT',{items:[{...note,title:'other device'}],revision:1},a.cookie),env);assert.equal(other.status,200)}return originalGet(k)};
+ const slow=await handleAccountApi(req('memories','PUT',{items:[{...note,title:'this device'}],revision:1},a.cookie),env);
+ env.BUCKET.get=originalGet;
+ assert.equal(slow.status,409);assert.equal((await slow.json()).error,'CONFLICT');
+ const current=await (await handleAccountApi(req('memories','GET',undefined,a.cookie),env)).json();assert.equal(current.revision,2);assert.equal(current.items[0].title,'other device');
+ const old=await (await handleAccountApi(req('backups/1','GET',undefined,a.cookie),env)).json();assert.equal(old.items[0].title,'base');
+});
+
+test('a genuinely missing workspace still refuses to overwrite',async()=>{
+ const env=bindings(),a=await signup(env,'missing@example.com');
+ assert.equal((await handleAccountApi(req('memories','PUT',{items:[note],revision:0},a.cookie),env)).status,200);
+ for(const k of [...env.objects.keys()])env.objects.delete(k);
+ const r=await handleAccountApi(req('memories','PUT',{items:[{...note,title:'new'}],revision:1},a.cookie),env);assert.equal(r.status,503);assert.equal(env.objects.size,0);
+});
+
+test('account deletion also removes objects written by a save that was in flight',async()=>{
+ const env=bindings(),a=await signup(env,'gone@example.com'),b=await signup(env,'stays@example.com');
+ assert.equal((await handleAccountApi(req('memories','PUT',{items:[note],revision:0},a.cookie),env)).status,200);
+ assert.equal((await handleAccountApi(req('memories','PUT',{items:[{...note,title:'B'}],revision:0},b.cookie),env)).status,200);
+ const originalBatch=env.DB.batch;let injected=false;
+ env.DB.batch=async statements=>{if(!injected){injected=true;await env.BUCKET.put('users/'+a.data.user.id+'/late-write.json','[]')}return originalBatch(statements)};
+ const r=await handleAccountApi(req('account/delete','POST',{confirmEmail:'gone@example.com'},a.cookie),env);env.DB.batch=originalBatch;
+ assert.equal(r.status,200);
+ assert.deepEqual([...env.objects.keys()].filter(k=>k.startsWith('users/'+a.data.user.id+'/')),[]);
+ const other=await (await handleAccountApi(req('memories','GET',undefined,b.cookie),env)).json();assert.equal(other.items[0].title,'B');
+});

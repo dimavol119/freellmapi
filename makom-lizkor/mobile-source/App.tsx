@@ -1,5 +1,5 @@
 import {BackupPanel} from './src/BackupPanel';
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {ICONS,PALETTES,ThemeName,defaultTheme,themeStyles} from './src/theme';
 import {ActivityIndicator, Alert, AppState, Image, Linking, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions} from 'react-native';
@@ -12,7 +12,7 @@ import {cancelReminder, scheduleReminder} from './src/services/notifications';
 import {exportBackup, exportCalendar, saveBackupToCloud} from './src/services/export';
 import {LanguageProvider,useI18n} from './src/LanguageProvider';
 import {LANGUAGE_NAMES,Language} from './src/i18n';
-import {User,session,authenticate,logout,deleteAccount,requestPasswordReset,confirmPasswordReset,privacyUrl,loadCloudMemories,saveCloudMemories,accountErrorMessage} from './src/services/account';
+import {isSaving,User,session,authenticate,logout,deleteAccount,requestPasswordReset,confirmPasswordReset,privacyUrl,loadCloudMemories,saveCloudMemories,accountErrorMessage} from './src/services/account';
 import {parseBirthdayList,selectedBirthdays} from './src/birthdays';
 import {googleStatus,beginGoogle,googleResult} from './src/services/google';
 import {facebookStatus,beginFacebook,facebookResult} from './src/services/facebook';
@@ -42,6 +42,9 @@ function Workspace(){
  const [items,setItems]=useState<Memory[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(false),[busy,setBusy]=useState(false);
  const [query,setQuery]=useState(''),[topic,setTopic]=useState(''),[filter,setFilter]=useState<Filter>('all'),[sort,setSort]=useState<'new'|'date'>('new');
  const [section,setSection]=useState<'library'|'reminders'|'settings'|'study'>('library'),[editor,setEditor]=useState(false),[editing,setEditing]=useState<Memory|null>(null),[draft,setDraft]=useState<Draft>(emptyDraft()),[error,setError]=useState(''),[message,setMessage]=useState(''),[demo,setDemo]=useState(false),[lightbox,setLightbox]=useState<string|null>(null);
+ // Web: warn before the tab is closed or reloaded while a save is running or the editor holds unsaved text.
+ const editorStart=useRef('');const unsaved=useRef<()=>boolean>(()=>false);unsaved.current=()=>isSaving()||busy||(editor&&JSON.stringify(draft)!==editorStart.current);
+ useEffect(()=>{if(Platform.OS!=='web'||typeof window==='undefined')return;const guard=(e:BeforeUnloadEvent)=>{if(!unsaved.current())return;e.preventDefault();e.returnValue=''};window.addEventListener('beforeunload',guard);return()=>window.removeEventListener('beforeunload',guard)},[]);
  const birthdayRows=useMemo(()=>parseBirthdayList(birthdayText,items),[birthdayText,items]);
  async function load(){setLoading(true);setItems([]);try{const current=await session();setAccountAvailable(current.available);setUser(current.user);setItems(current.user?await loadCloudMemories():await loadMemories());setLoadError(false)}catch{setLoadError(true)}finally{setLoading(false)}}
  useEffect(()=>{void load();void facebookStatus().then(setFacebookEnabled);void googleStatus().then(setGoogleEnabled);const result=facebookResult()||googleResult();if(result){if(result.ok)setMessage(t(result.message));else{if(result.needsExistingLogin)setAuthMode('login');setAuthError(result.message);setAuthOpen(true)}}},[]);useEffect(()=>{if(!message)return;const timer=setTimeout(()=>setMessage(''),6000);return()=>clearTimeout(timer)},[message]);
@@ -53,7 +56,7 @@ function Workspace(){
   {...emptyDraft('ימי הולדת'),id:'demo-3',title:t("יום הולדת לדוגמה"),birthday:'1995-06-14',note:t("לתכנן משהו אישי מראש."),intent:t("לכתוב ברכה ולבחור מתנה."),createdAt:1,done:false,notificationScheduled:false},
  ],[language]);
  const shown=useMemo(()=>selectMemories(demo?examples:items,query,topic,section==='reminders'?'reminders':filter,sort),[demo,examples,items,query,topic,section,filter,sort]);
- function open(item:Memory|null=null){if(loadError||loading||busy)return;setEditing(item);setDraft(item?{...item,images:[...item.images]}:emptyDraft(topic||'אישי'));setError('');setEditor(true)}
+ function open(item:Memory|null=null){if(loadError||loading||busy)return;const initial:Draft=item?{...item,images:[...item.images]}:emptyDraft(topic||'אישי');editorStart.current=JSON.stringify(initial);setEditing(item);setDraft(initial);setError('');setEditor(true)}
  function change<K extends keyof Draft>(key:K,value:Draft[K]){setDraft(d=>({...d,[key]:value}))}
  async function addImages(){setBusy(true);try{const pictures=await pickImages();setDraft(d=>({...d,images:[...d.images,...pictures]}))}catch{setError(t("לא הצלחנו לקרוא את התמונות. נסה שוב."))}finally{setBusy(false)}}
  async function persist(next:Memory[]){if(loadError||loading)throw Error('WORKSPACE_NOT_LOADED');let saved=next;if(user)saved=await saveCloudMemories(next);else await saveMemories(next);setItems(saved);if(saved!==next)setMessage(t('הנתונים מהמכשיר השני מוזגו עם השינוי שלך.'));return saved}

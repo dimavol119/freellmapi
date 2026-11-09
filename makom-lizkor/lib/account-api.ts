@@ -28,11 +28,18 @@ async function sendResetEmail(config:ResetConfig,to:string,code:string){
  return r.ok;
 }
 async function purgeExpired(db:D1Database){const ms=Date.now(),sec=Math.floor(ms/1000);await db.batch([db.prepare('DELETE FROM sessions WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(sec),db.prepare('DELETE FROM facebook_states WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM google_states WHERE expires_at<?').bind(ms),db.prepare('DELETE FROM password_resets WHERE expires_at<?').bind(ms)])}
-async function deleteAccountData(account:Account,db:D1Database,bucket:R2Bucket){
- const prefix='users/'+account.id+'/';let cursor:string|undefined;
+async function deleteUserObjects(id:string,bucket:R2Bucket){
+ const prefix='users/'+id+'/';let cursor:string|undefined;
  do{const page=await bucket.list({prefix,cursor,limit:500});if(page.objects.length)await bucket.delete(page.objects.map(o=>o.key));cursor=page.truncated?page.cursor:undefined}while(cursor);
+}
+async function revisionMoved(db:D1Database,account:Account){const row=await db.prepare('SELECT revision FROM accounts WHERE id=?').bind(account.id).first<{revision:number}>();return !row||row.revision!==account.revision}
+async function deleteAccountData(account:Account,db:D1Database,bucket:R2Bucket){
+ await deleteUserObjects(account.id,bucket);
  if(account.workspace_key)await bucket.delete(account.workspace_key);
  await db.batch([db.prepare('DELETE FROM sessions WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM facebook_states WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM google_states WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM facebook_identities WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM google_identities WHERE user_id=?').bind(account.id),db.prepare('DELETE FROM rate_limits WHERE key LIKE ? OR key LIKE ?').bind('save:'+account.id+':%','delete:'+account.id+':%'),db.prepare('DELETE FROM password_resets WHERE email=?').bind(account.email),db.prepare('DELETE FROM accounts WHERE id=?').bind(account.id)]);
+ // A save that was already in flight may have written after the first sweep. The account row is gone now, so no new
+ // save can succeed; sweep once more so no copy of the deleted user's data stays behind.
+ await deleteUserObjects(account.id,bucket).catch(()=>console.error('account cleanup sweep failed'));
 }
 async function authenticated(request:Request,db:D1Database){const token=request.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!token)return null;return db.prepare('SELECT a.* FROM accounts a JOIN sessions s ON s.user_id=a.id WHERE s.token_hash=? AND s.expires_at>?').bind(await hash(token),Date.now()).first<Account>()}
 async function startSession(account:Account,db:D1Database,secure:boolean){const token=random();await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)').bind(await hash(token),account.id,Date.now()+2592000000).run();return json({user:{id:account.id,email:account.email}},200,sessionCookie(token,secure))}
@@ -124,8 +131,18 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   if(data.revision!==account.revision)return json({error:'CONFLICT'},409);
   // Preserve the exact previous revision before any replacement, including deletions.
   // If the current object cannot be read, fail rather than overwrite unrecoverable data.
-  if(account.workspace_key){const previous=await bucket.get(account.workspace_key);if(!previous)return json({error:'STORAGE_UNAVAILABLE'},503);const oldItems=await previous.json();if(!validItems(oldItems))return json({error:'STORAGE_UNAVAILABLE'},503);await bucket.put(historyKey(account.id,account.revision),JSON.stringify(oldItems),{httpMetadata:{contentType:'application/json'}})}
-  const key='users/'+account.id+'/'+crypto.randomUUID()+'.json';await bucket.put(key,JSON.stringify(data.items),{httpMetadata:{contentType:'application/json'}});
+  const nextText=JSON.stringify(data.items);
+  if(account.workspace_key){
+   const previous=await bucket.get(account.workspace_key);
+   // A concurrent save may have replaced (and removed) the object we were about to read: that is a conflict to merge, not a storage fault.
+   if(!previous)return await revisionMoved(db,account)?json({error:'CONFLICT'},409):json({error:'STORAGE_UNAVAILABLE'},503);
+   const oldItems=await previous.json();if(!validItems(oldItems))return json({error:'STORAGE_UNAVAILABLE'},503);
+   const oldText=JSON.stringify(oldItems);
+   // Identical content: keep the revision and history unchanged so a no-op save never pushes a real version out of the three kept.
+   if(oldText===nextText)return json({revision:account.revision,unchanged:true});
+   await bucket.put(historyKey(account.id,account.revision),oldText,{httpMetadata:{contentType:'application/json'}});
+  }else if(!data.items.length)return json({revision:account.revision,unchanged:true});
+  const key='users/'+account.id+'/'+crypto.randomUUID()+'.json';await bucket.put(key,nextText,{httpMetadata:{contentType:'application/json'}});
   let changed:{revision:number}|null;
   try{changed=await db.prepare('UPDATE accounts SET workspace_key=?,revision=revision+1 WHERE id=? AND revision=? RETURNING revision').bind(key,account.id,account.revision).first<{revision:number}>()}catch(e){await bucket.delete(key).catch(()=>{});throw e}
   if(!changed){await bucket.delete(key).catch(()=>{});return json({error:'CONFLICT'},409)}

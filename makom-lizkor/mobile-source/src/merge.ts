@@ -1,6 +1,8 @@
 import type {Memory} from './model';
 const stable=(v:unknown):string=>JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.entries(x as Record<string,unknown>).sort(([a],[b])=>a<b?-1:a>b?1:0)):x);
 const same=(a:Memory,b:Memory)=>stable(a)===stable(b);
+/** True when two lists hold exactly the same items in the same order (key order ignored). */
+export const sameList=(a:Memory[],b:Memory[])=>a.length===b.length&&a.every((item,n)=>same(item,b[n]));
 /**
  * Three-way merge of two devices' edits. `base` is the last state this device synced, `mine` is this device's
  * list, `theirs` is the server's current list. Per item: one-sided changes win; an edit beats a deletion, so
