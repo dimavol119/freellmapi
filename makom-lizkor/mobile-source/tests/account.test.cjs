@@ -82,3 +82,11 @@ test('email verification requests carry the account, validate input first and ma
   await assert.rejects(a.sendVerificationCode(),e=>e.code==='EMAIL_SEND_FAILED');
   for(const code of ['EMAIL_NOT_VERIFIED','VERIFY_UNAVAILABLE','EMAIL_SEND_FAILED','EMAIL_ALREADY_VERIFIED'])assert.match(a.accountErrorMessage(new a.AccountError(code)),/[֐-׿]/,code);
  }finally{global.fetch=original}});
+test('every error code the server can return has its own Hebrew message with Russian and English translations',()=>{
+ const server=fs.readFileSync(path.join(__dirname,'../../lib/account-api.ts'),'utf8');const codes=[...new Set([...server.matchAll(/error:'([A-Z_]+)'/g)].map(m=>m[1]))];
+ const a=service();const generic=a.accountErrorMessage(new a.AccountError('SOMETHING_UNKNOWN'));const {translate}=load('i18n');
+ assert.ok(codes.length>=20);
+ for(const code of codes){const message=a.accountErrorMessage(new a.AccountError(code));assert.notEqual(message,generic,code);assert.match(message,/[֐-׿]/,code);assert.notEqual(translate(message,'en'),message,code+' en');assert.notEqual(translate(message,'ru'),message,code+' ru')}
+});
+test('large saves get enough time on a slow phone connection, small requests stay quick',()=>{const a=service();
+ assert.equal(a.requestTimeout(0),20000);assert.ok(a.requestTimeout(5*1024*1024)>=140000,'5 MB of photos');assert.equal(a.requestTimeout(50*1024*1024),240000,'capped');});

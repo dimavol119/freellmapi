@@ -547,5 +547,14 @@ Object.assign(translations,{
   "הנתונים שלך": {"en": "Your data", "ru": "Ваши данные"},
   "אפשר להוריד בכל רגע את כל הפריטים שלך לקובץ אחד ולשמור אותו אצלך.": {"en": "You can download all your items to one file at any time and keep it.", "ru": "В любой момент можно скачать все записи одним файлом и сохранить у себя."},
   "הורדת כל הנתונים שלי": {"en": "Download all my data", "ru": "Скачать все мои данные"},
-  "לא הצלחנו להכין את הקובץ. נסה שוב.": {"en": "We could not prepare the file. Try again.", "ru": "Не удалось подготовить файл. Повторите попытку."}
+  "לא הצלחנו להכין את הקובץ. נסה שוב.": {"en": "We could not prepare the file. Try again.", "ru": "Не удалось подготовить файл. Повторите попытку."},
+  "שירות החשבונות אינו זמין כרגע. הפריטים שלך לא נמחקו. נסה שוב בעוד כמה דקות.": {"en": "The account service is unavailable right now. Your items were not deleted. Try again in a few minutes.", "ru": "Сервис аккаунтов сейчас недоступен. Ваши записи не удалены. Повторите через несколько минут."},
+  "אירעה תקלה בשרת. הפריטים שלך לא נמחקו. נסה שוב בעוד רגע.": {"en": "A server error occurred. Your items were not deleted. Try again in a moment.", "ru": "Произошла ошибка сервера. Ваши записи не удалены. Повторите чуть позже."},
+  "הבקשה לא נשלחה כראוי. רענן את הדף ונסה שוב.": {"en": "The request was not sent correctly. Refresh the page and try again.", "ru": "Запрос отправлен некорректно. Обновите страницу и повторите."},
+  "חלק מהפריטים אינם תקינים ולכן לא נשמרו. רענן את הדף ונסה שוב.": {"en": "Some items are invalid and were not saved. Refresh the page and try again.", "ru": "Некоторые записи некорректны и не сохранены. Обновите страницу и повторите."},
+  "הפריט או הגרסה המבוקשים לא נמצאו.": {"en": "The requested item or version was not found.", "ru": "Запрошенная запись или версия не найдена."},
+  "הפעולה נחסמה מטעמי אבטחה. פתח את האתר מהכתובת הרגילה ונסה שוב.": {"en": "The action was blocked for security. Open the site from its usual address and try again.", "ru": "Действие заблокировано из соображений безопасности. Откройте сайт по обычному адресу и повторите."},
+  "הכניסה עם Google עדיין לא פעילה.": {"en": "Google sign-in is not active yet.", "ru": "Вход через Google пока не активен."},
+  "הכניסה עם פייסבוק אינה פעילה.": {"en": "Facebook sign-in is not active.", "ru": "Вход через Facebook не активен."},
+  "האתר אינו משתמש בבינה מלאכותית.": {"en": "This site does not use artificial intelligence.", "ru": "Этот сайт не использует искусственный интеллект."}
 });

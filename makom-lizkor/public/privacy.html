@@ -4,55 +4,77 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>מדיניות פרטיות · מקום לזכור</title>
+<meta name="theme-color" content="#f3ede3">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
-:root{color-scheme:dark;--bg:#13091b;--panel:#1f0f2d;--line:#351f48;--text:#f3ece5;--muted:#b9a2d0;--accent:#ff8a38;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root{--bg:#13091b;--panel:#1f0f2d;--line:#351f48;--text:#f3ece5;--muted:#b9a2d0;--accent:#ff8a38}}
+@font-face{font-family:'Frank Ruhl Libre';font-weight:700;font-display:swap;src:url(/fonts/frank-ruhl-libre-hebrew-700-normal.woff2) format('woff2');unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F}
+@font-face{font-family:'Frank Ruhl Libre';font-weight:700;font-display:swap;src:url(/fonts/frank-ruhl-libre-latin-700-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'Assistant';font-weight:400;font-display:swap;src:url(/fonts/assistant-hebrew-400-normal.woff2) format('woff2');unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F}
+@font-face{font-family:'Assistant';font-weight:400;font-display:swap;src:url(/fonts/assistant-latin-400-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'Assistant';font-weight:700;font-display:swap;src:url(/fonts/assistant-hebrew-700-normal.woff2) format('woff2');unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F}
+:root{color-scheme:light;--bg:#f3ede3;--panel:#fbf8f2;--line:#ddd3c3;--text:#1f1a15;--ink2:#40372e;--muted:#6b6157;--accent:#a84a22}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.75}
-main{max-width:720px;margin:0 auto;padding:28px 20px 48px}
-h1{font-size:28px;margin:0 0 4px}
-h2{font-size:19px;margin:28px 0 6px;color:var(--accent)}
-p,li{font-size:16px}
-.updated{color:var(--muted);font-size:13px;margin:0 0 18px}
-.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:16px 0}
+body{margin:0;background:var(--bg);color:var(--ink2);font-family:Assistant,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;font-size:17px;line-height:1.75;-webkit-font-smoothing:antialiased;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+main{max-width:720px;margin:0 auto;padding:28px 20px 56px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+header a{display:flex;align-items:center;gap:12px;color:var(--text);text-decoration:none;font-family:"Frank Ruhl Libre",Georgia,serif;font-weight:700;font-size:22px}
+h1{font-family:"Frank Ruhl Libre",Georgia,serif;color:var(--text);font-size:38px;line-height:1.2;margin:26px 0 6px}
+h2{font-family:"Frank Ruhl Libre",Georgia,serif;color:var(--text);font-size:23px;margin:34px 0 6px}
+.updated{color:var(--muted);font-size:15px;margin:0 0 20px}
+.lead{font-size:19px;color:var(--text)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin:18px 0}
+ul{padding-inline-start:22px}li{margin:6px 0}
+strong{color:var(--text)}
 a{color:var(--accent)}
+.rule{width:120px;height:11px;margin:10px 0 0}
+footer{margin-top:44px;color:var(--muted);font-size:14px;border-top:1px solid var(--line);padding-top:16px}
 </style>
 </head>
 <body>
 <main>
-<h1>🎃 מדיניות פרטיות</h1>
-<p class="updated">מקום לזכור · עודכן לאחרונה: 3 בנובמבר 2026</p>
+<header><a href="/"><svg width="34" height="34" viewBox="0 0 96 96" aria-hidden="true"><path d="M38 72H50V92L44 86.4L38 92Z" fill="#C2592C"/><rect x="22" y="6" width="54" height="72" rx="5" fill="#1F1A15"/><path d="M66.5 6.5V77.5" stroke="#F3EDE3" stroke-opacity=".16" stroke-width="1.5"/><rect x="31" y="22" width="27" height="15" rx="2" fill="#F3EDE3" fill-opacity=".92"/><path d="M35.5 29.5H53.5" stroke="#1F1A15" stroke-opacity=".55" stroke-width="2" stroke-linecap="round"/></svg>מקום לזכור</a></header>
 
-<p>"מקום לזכור" הוא מקום פרטי לשמירת זיכרונות, רעיונות, תזכורות וימי הולדת. המסמך הזה מסביר איזה מידע נשמר, איפה, ומה אפשר לעשות איתו.</p>
+<h1>מדיניות פרטיות</h1>
+<p class="updated">עודכן לאחרונה: 9 בנובמבר 2026</p>
+<p class="lead">"מקום לזכור" הוא מקום פרטי לשמירת זיכרונות, רעיונות, תזכורות וימי הולדת. המסמך הזה מסביר איזה מידע נשמר, איפה, ומה אפשר לעשות איתו.</p>
+<svg class="rule" viewBox="0 0 180 16" aria-hidden="true"><path d="M3 9c10-7 18-7 26 0s16 7 24 0 16-7 24 0 16 7 24 0 16-7 24 0 16 7 24 0 14-6 22-2" fill="none" stroke="#A84A22" stroke-width="2.6" stroke-linecap="round"/></svg>
 
 <h2>איזה מידע נשמר</h2>
 <ul>
-<li><strong>פרטי חשבון:</strong> כתובת אימייל וסיסמה. הסיסמה נשמרת בצורה מוצפנת (גיבוב עם מלח) ואיננה נראית לנו.</li>
-<li><strong>התוכן שלך:</strong> הזיכרונות, התמונות, התאריכים והתזכורות שאתה שומר בחשבון.</li>
-<li><strong>התחברות עם Google או Facebook:</strong> אם בחרת בכך, נשמרים כתובת האימייל ומזהה פנימי שהספק מוסר לנו, כדי לזהות אותך בכניסה הבאה. איננו מקבלים את הסיסמה שלך אצלם.</li>
-<li><strong>נתונים טכניים זמניים:</strong> אסימוני התחברות (סשנים) ומונים להגבלת ניסיונות, שנמחקים אוטומטית כשפג תוקפם.</li>
+<li><strong>פרטי חשבון:</strong> כתובת אימייל וסיסמה. הסיסמה נשמרת בצורה מוצפנת (גיבוב עם מלח), ואיננו יכולים לראות אותה.</li>
+<li><strong>אימות אימייל:</strong> כשנרשמים, נשלח לכתובת קוד חד־פעמי בן 8 ספרות, ובשרת נשמר רק גיבוב שלו, לזמן קצר. בנוסף נשמר מתי הכתובת אומתה.</li>
+<li><strong>התוכן שלך:</strong> הזיכרונות, התמונות, התאריכים והתזכורות שאתה שומר בחשבון. תמונות גדולות מוקטנות במכשיר שלך לפני השמירה.</li>
+<li><strong>התחברות עם Google:</strong> אם בחרת בכך, נשמרים כתובת האימייל ומזהה פנימי שהספק מוסר לנו, כדי לזהות אותך בכניסה הבאה. איננו מקבלים את הסיסמה שלך אצל Google.</li>
+<li><strong>נתונים טכניים זמניים:</strong> אסימוני התחברות (סשנים) ומונים להגבלת ניסיונות. הם נמחקים אוטומטית כשפג תוקפם.</li>
 </ul>
 
-<h2>שימוש מקומי בלי חשבון</h2>
-<p>אפשר להשתמש באפליקציה בלי הרשמה. במצב הזה התוכן נשמר רק במכשיר שלך ואינו נשלח אלינו.</p>
+<div class="box"><strong>הפרדה מלאה בין משתמשים.</strong> לכל חשבון מרחב פרטי משלו. משתמש אחד לא יכול לראות, לשנות או לשחזר פריטים של משתמש אחר, גם לא במכשיר משותף.</div>
+
+<h2>שימוש בלי חשבון</h2>
+<p>אפשר להשתמש באתר בלי הרשמה. במצב הזה התוכן נשמר רק בדפדפן שלך ואינו נשלח אלינו. אחרי הרשמה, האתר שואל אם להעביר את הפריטים מהמכשיר לחשבון. שום דבר לא מועבר בלי אישורך.</p>
 
 <h2>איפה המידע נשמר</h2>
-<p>תוכן החשבון נשמר בשרתים של Cloudflare (מסד נתונים ואחסון קבצים), במרחב פרטי לכל חשבון. איננו מוכרים את המידע ואיננו משתפים אותו עם מפרסמים.</p>
+<p>תוכן החשבון נשמר בשרתים של Cloudflare (מסד נתונים ואחסון קבצים), במרחב פרטי לכל חשבון. איננו מוכרים את המידע ואיננו משתפים אותו עם מפרסמים. באתר אין פרסומות, אין כלי מעקב ואין בינה מלאכותית.</p>
+<p>הגופנים והאיורים נטענים מהאתר עצמו, בלי פנייה לשירותים חיצוניים.</p>
 
-<h2>שחזור סיסמה</h2>
-<p>כאשר שירות שחזור הסיסמה פעיל, כתובת האימייל וקוד שחזור זמני מועברים לספק שליחת המיילים (Brevo או Resend) לצורך מסירת הודעת השחזור. ההודעה נשלחת רק למייל של החשבון שביקש שחזור, ללא עותק לבעל האתר. הסיסמה עצמה אינה נשלחת במייל.</p>
+<h2>התקנה כאפליקציה</h2>
+<p>אם הוספת את האתר למסך הבית, המכשיר שומר רק את מעטפת האתר (הקוד, האייקונים והגופנים), כדי שייפתח מהר. פריטים פרטיים לא נשמרים בזיכרון הזה. בלי חיבור לאינטרנט האתר נפתח, אבל לא מציג את התוכן שלך.</p>
+
+<h2>שליחת מיילים</h2>
+<p>כדי לשלוח קוד אימות או קוד לשחזור סיסמה, כתובת האימייל והקוד מועברים לספק שליחת המיילים (Brevo). ההודעה נשלחת רק לכתובת של החשבון, בלי עותק לבעל האתר. הסיסמה עצמה לעולם לא נשלחת במייל.</p>
+
 <h2>גיבוי</h2>
-<p>לפני החלפת שמירה בחשבון נשמרות עד שלוש גרסאות קודמות לצורך שחזור. הגרסאות פרטיות לחשבון ונמחקות עם מחיקתו. פריט שנמחק עשוי להישאר בגרסאות הקודמות עד להחלפתן בשמירות חדשות.</p>
-<p>הגיבוי ל-Google Drive או ל-iCloud מתבצע ביוזמתך בלבד, ואל החשבון שלך אצל הספק הזה.</p>
+<p>לפני כל החלפה של שמירה בחשבון נשמרות עד שלוש גרסאות קודמות, לצורך שחזור. הגרסאות פרטיות לחשבון ונמחקות יחד איתו. פריט שנמחק עשוי להישאר בגרסאות הקודמות עד שהן מתחלפות בשמירות חדשות.</p>
+<p>אפשר להוריד בכל רגע את כל הנתונים לקובץ. הגיבוי ל־Google Drive או ל־iCloud נעשה ביוזמתך בלבד, ונשמר בחשבון שלך אצל אותו ספק.</p>
 
 <h2>מחיקת החשבון והמידע</h2>
-<div class="box">
-<p>אפשר למחוק את החשבון בכל עת: <strong>הגדרות ← מחיקת החשבון</strong>, והקלדת האימייל לאישור. המחיקה מסירה לצמיתות את כל הזיכרונות והתמונות מהשרת, את החשבון ואת החיבורים ל-Google ול-Facebook. אי אפשר לשחזר אותם אלא מגיבוי שהורדת בעצמך.</p>
-<p>אם אינך מצליח להיכנס לחשבון, אפשר לבקש מחיקה בפנייה לכתובת: <strong>dimavol766@gmail.com</strong>.</p>
-</div>
+<ul>
+<li>אפשר למחוק את החשבון בכל עת: <strong>הגדרות ← מחיקת החשבון</strong>, ולאשר בהקלדת האימייל. המחיקה מסירה לצמיתות מהשרת את כל הזיכרונות והתמונות, את הגרסאות הקודמות, את החשבון ואת החיבור ל־Google. אי אפשר לשחזר אותם, אלא מגיבוי שהורדת בעצמך.</li>
+<li>אם אינך מצליח להיכנס לחשבון, אפשר לבקש מחיקה בפנייה לכתובת: <a href="mailto:dimavol766@gmail.com">dimavol766@gmail.com</a>.</li>
+</ul>
 
 <h2>הרשאות והתראות</h2>
-<p>האפליקציה עשויה לבקש הרשאה להתראות בטלפון, כדי להזכיר לך תזכורות שקבעת. אפשר לסרב או לבטל בכל עת בהגדרות המכשיר.</p>
+<p>האתר מבקש גישה לתמונות רק כשאתה בוחר להוסיף תמונה. בדפדפן, תזכורות מתווספות ליומן דרך קובץ שאתה פותח בעצמך. אפשר לסרב לכל הרשאה, או לבטל אותה בכל עת בהגדרות המכשיר.</p>
 
 <h2>ילדים</h2>
 <p>השירות אינו מיועד לילדים מתחת לגיל 13.</p>
@@ -61,7 +83,9 @@ a{color:var(--accent)}
 <p>אם המדיניות תשתנה, התאריך בראש הדף יתעדכן.</p>
 
 <h2>יצירת קשר</h2>
-<p>שאלות או בקשות בנושא פרטיות: <strong>dimavol766@gmail.com</strong>.</p>
+<p>שאלות או בקשות בנושא פרטיות: <a href="mailto:dimavol766@gmail.com">dimavol766@gmail.com</a>.</p>
+
+<footer>© 2026 מקום לזכור · <a href="/">חזרה לאתר</a></footer>
 </main>
 </body>
 </html>

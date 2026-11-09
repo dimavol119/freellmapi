@@ -1,5 +1,19 @@
 # Makom Lizkor — project handoff (updated 2026-11-09)
 
+## Redesign and hardening (2026-11-09, sixth round)
+
+- **New visual identity:** archive-notebook logo (`mobile-source/assets/logo-mark.svg`), warm paper palette with ink text and one terracotta accent (`CLASSIC` in `src/theme.ts`; Halloween still derives from it), Frank Ruhl Libre + Assistant self-hosted in `mobile-source/public/fonts` (OFL licences included, no third-party requests), paper grain via CSS.
+- **Original illustrations** drawn for the project (`mobile-source/assets/art/*.svg` sources, PNGs used by the app): hero, seven topic drawings (cards without photos), empty state, sign-in panel, divider. No stock or AI images.
+- Glyph icons (✳ ⌕ ▦ ◷ ♧ ⚙) removed; topics shown with colour dots (`TOPIC_COLORS`). Inputs are 16px (stops iPhone zoom on focus). Phone header compacted; desktop no longer shows both sidebar and bottom bar; toast centred.
+- **Bug fixed:** all modals were mirrored in Hebrew (they render outside the LTR root); each modal root now sets `direction:'ltr'` like the main view.
+- **Download window** (header "הורדה"): install steps per device, Chrome's install prompt when offered, and "download all my data".
+- **Errors:** every server error code (25) has its own Hebrew message with ru/en translations; a client test reads the server source and fails if a new code lacks one.
+- **Slow connections:** request timeout scales with upload size (20 s + ~40 KB/s, max 4 min) instead of a flat 20 s.
+- **Shared addresses (mobile CGNAT, home Wi-Fi):** registration limit per address raised 5→20/hour and auth 30→60/15 min; the per-account failed sign-in limit (10/15 min) is unchanged.
+- `public/privacy.html` rewritten in the new look and updated (verification, image shrinking, self-hosted fonts, installed app cache).
+
+Validation: 44 server tests, 52 client tests, both TypeScript checks, web export and server build pass. Playwright at 1366×900, iPhone 13 and Pixel 7: registration/sign-in/device-items flow, email verification flow (email "enabled", outbound blocked, planted code), installable app cache (only shell, fonts, icons; no `/api`, no private text), offline start, download window, privacy page.
+
 ## Email verification at registration (2026-11-09, fifth round)
 
 **Deploy step: apply `drizzle/0004_email_verification.sql` to production D1 before (or together with) the new server build.** It adds `accounts.email_verified_at` and the `email_verifications` table and sets existing accounts to 0. Migrations 0000–0003 are unchanged; 0004 and its snapshot were generated with drizzle-kit (plus the UPDATE line).
@@ -56,7 +70,7 @@ No schema change, no migration, no new service, secret or paid API. Server API s
 
 Validation (first round): 32 server tests and 45 client tests pass; TypeScript passes in both projects; Expo web export and server build pass. Local browser QA (wrangler local D1/R2, synthetic `@example.test` accounts, local state deleted afterwards) at 390×844, 412×915 and 1280×900: registration, saving a 12 MB photo (stored 1600×1200), a phone and a desktop session of the same account editing concurrently (CONFLICT → merged, both changes kept), a second account seeing no items/versions of the first (404 on its version), and the close-tab warning. No production data was touched. Real Galaxy/iPhone hardware and native builds were not exercised.
 
-Release: `public/` already contains the new web export (`index-6ee03e42….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
+Release: `public/` already contains the new web export (`index-7031b877….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
 
 ## Storage and recovery update
 

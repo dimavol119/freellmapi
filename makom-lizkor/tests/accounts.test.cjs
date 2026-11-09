@@ -277,3 +277,10 @@ test('migration 0004 marks existing accounts as not requiring verification and d
  assert.equal((await handleAccountApi(req('account/delete','POST',{confirmEmail:'gone-verify@example.com'},a.cookie),env)).status,200,'an unverified account can delete itself');
  assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM email_verifications').get().n,0);assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM accounts').get().n,0);
 });
+
+test('friends behind one shared mobile or home address can all register, and the per-address limit still exists',async()=>{
+ const env=bindings();
+ for(let i=0;i<15;i++)assert.equal((await handleAccountApi(req('auth/register','POST',{email:'friend'+i+'@example.com',password:'Long safe test passphrase!'}),env)).status,200,'friend '+i);
+ let last;for(let i=15;i<25;i++)last=(await handleAccountApi(req('auth/register','POST',{email:'friend'+i+'@example.com',password:'Long safe test passphrase!'}),env)).status;
+ assert.equal(last,429,'mass registration from one address is still stopped');
+});

@@ -90,13 +90,13 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
  if(path==='/api/auth/register'||path==='/api/auth/login'){
   if(request.method!=='POST')return json({error:'METHOD'},405);
   if(Math.random()<0.05)await purgeExpired(db).catch(()=>{});
-  const ip=request.headers.get('CF-Connecting-IP')||'unknown';if(!await rate(db,'auth:'+await hash(ip),30))return json({error:'TOO_MANY_ATTEMPTS'},429);
+  const ip=request.headers.get('CF-Connecting-IP')||'unknown';if(!await rate(db,'auth:'+await hash(ip),60))return json({error:'TOO_MANY_ATTEMPTS'},429);
   const data=await body(request),email=typeof data.email==='string'?data.email.trim().toLowerCase():'',password=typeof data.password==='string'?data.password:'';
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||password.length<12||password.length>128)return json({error:'INVALID_CREDENTIAL_FORMAT'},400);
   const existing=await db.prepare('SELECT * FROM accounts WHERE email=?').bind(email).first<Account>();
   if(path.endsWith('register')){
    if(weakPassword(password,email))return json({error:'WEAK_PASSWORD'},400);
-   if(!await rate(db,'signup:'+await hash(ip),5,3600))return json({error:'TOO_MANY_ATTEMPTS'},429);
+   if(!await rate(db,'signup:'+await hash(ip),20,3600))return json({error:'TOO_MANY_ATTEMPTS'},429);
    if(existing)return json({error:'EMAIL_IN_USE'},409);const salt=random(),id=crypto.randomUUID(),derived=await passwordHash(password,salt);
    try{await db.prepare('INSERT INTO accounts(id,email,salt,password_hash,revision,created_at,email_verified_at) VALUES (?,?,?,?,0,?,NULL)').bind(id,email,salt,derived,Date.now()).run()}catch(e){if(String(e).includes('UNIQUE'))return json({error:'EMAIL_IN_USE'},409);throw e}
    const created:Account={id,email,salt,password_hash:derived,workspace_key:null,revision:0,email_verified_at:null};
