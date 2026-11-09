@@ -1,5 +1,15 @@
 # Makom Lizkor — project handoff (updated 2026-11-09)
 
+## App base (2026-11-09, third round)
+
+The owner has no native app yet. Zero-cost path:
+- **Installable web app (PWA), works now on iPhone, Galaxy and desktop:** `mobile-source/public/` holds `manifest.webmanifest`, `sw.js`, icons and the `index.html` template (Expo export copies them; lang=he, dir=rtl, theme colour, Apple meta tags). Settings has an "Install as an app" box with per-platform steps and Chrome's install prompt when offered.
+- **Service worker rules:** never handles `/api/` or non-GET or cross-origin requests (a client test enforces this); network-first for pages so a release applies at once; stores the start page together with exactly the scripts it references (from the same response) and drops older scripts. Bug found during QA and fixed: the first version could cache the page without its script, giving a black offline screen.
+- **Offline:** the app shell opens with "No internet connection" (no private data is shown or cached) and reloads the account automatically when the connection returns.
+- **Native base:** brand icon, adaptive icon, splash, `com.makomlizkor.app` for Android and iOS, Russian added to iOS localizations. Android and iOS bundles compile (`expo export --platform android --platform ios`); expo-doctor 18/20 (the 2 failures need exp.host, unreachable here). See `mobile-source/APP-BUILD.md` for a free APK via EAS (owner's own free Expo account). Google Play ($25) and App Store ($99/yr) are not used, per the zero-spend rule.
+
+Validation: 37 server tests, 49 client tests, both TypeScript checks, web/native export and server build pass. Playwright (Pixel 7, iPhone 13) against local wrangler: manifest and service worker active; cache holds only shell, icons and the current script; no `/api` entry and no private text in any cache; offline start shows the message without data; reconnect restores the account items.
+
 ## Registration and sign-in update (2026-11-09, second round)
 
 - **New passwords must not be trivially guessable** (`weakPassword` in `lib/account-api.ts`, same rule in `strongPasswordError` in `auth-validation.ts`; a client test compares both): one repeated pattern (fewer than 5 distinct characters), keyboard/digit/alphabet runs, padding with spaces, or the email itself → `WEAK_PASSWORD`. Applies to registration and password reset only; existing users still sign in with old passwords. Checked before the hourly registration limit, so weak attempts do not lock anyone out.
@@ -28,7 +38,7 @@ No schema change, no migration, no new service, secret or paid API. Server API s
 
 Validation (first round): 32 server tests and 45 client tests pass; TypeScript passes in both projects; Expo web export and server build pass. Local browser QA (wrangler local D1/R2, synthetic `@example.test` accounts, local state deleted afterwards) at 390×844, 412×915 and 1280×900: registration, saving a 12 MB photo (stored 1600×1200), a phone and a desktop session of the same account editing concurrently (CONFLICT → merged, both changes kept), a second account seeing no items/versions of the first (404 on its version), and the close-tab warning. No production data was touched. Real Galaxy/iPhone hardware and native builds were not exercised.
 
-Release: `public/` already contains the new web export (`index-ab7c7a6d….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
+Release: `public/` already contains the new web export (`index-4e97cf4f….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
 
 ## Storage and recovery update
 

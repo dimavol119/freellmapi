@@ -484,5 +484,12 @@ Object.assign(translations,{
   "לא עכשיו": {"en": "Not now", "ru": "Не сейчас"},
   "הסיסמה קלה מדי לניחוש. אפשר להשתמש במשפט קצר שקל לך לזכור.": {"en": "This password is too easy to guess. Try a short sentence you can remember.", "ru": "Этот пароль слишком легко угадать. Используйте короткую фразу, которую легко запомнить."},
   "האם התכוונת ל־": {"en": "Did you mean ", "ru": "Возможно, вы имели в виду "},
-  "תיקון האימייל": {"en": "Fix the email", "ru": "Исправить адрес"}
+  "תיקון האימייל": {"en": "Fix the email", "ru": "Исправить адрес"},
+  "התקנה כאפליקציה": {"en": "Install as an app", "ru": "Установить как приложение"},
+  "אפשר להוסיף את מקום לזכור למסך הבית ולפתוח אותו כמו אפליקציה, בחינם.": {"en": "Add A Place to Remember to your home screen and open it like an app, for free.", "ru": "Добавьте «Место для воспоминаний» на главный экран и открывайте его как приложение — бесплатно."},
+  "התקנת האפליקציה": {"en": "Install the app", "ru": "Установить приложение"},
+  "אייפון: ב־Safari לוחצים על כפתור השיתוף ואז על „הוספה למסך הבית”.": {"en": "iPhone: in Safari tap Share, then “Add to Home Screen”.", "ru": "iPhone: в Safari нажмите «Поделиться», затем «На экран „Домой“»."},
+  "גלקסי: בתפריט של Chrome או של Samsung Internet בוחרים „התקנת אפליקציה” או „הוספה למסך הבית”.": {"en": "Galaxy: in the Chrome or Samsung Internet menu choose “Install app” or “Add to Home screen”.", "ru": "Galaxy: в меню Chrome или Samsung Internet выберите «Установить приложение» или «Добавить на главный экран»."},
+  "מחשב: ב־Chrome או ב־Edge לוחצים על סמל ההתקנה בשורת הכתובת.": {"en": "Computer: in Chrome or Edge click the install icon in the address bar.", "ru": "Компьютер: в Chrome или Edge нажмите значок установки в адресной строке."},
+  "אין חיבור לאינטרנט. הנתונים שמורים בחשבון ויופיעו כשהחיבור יחזור.": {"en": "No internet connection. Your data is safe in your account and will appear when the connection returns.", "ru": "Нет подключения к интернету. Данные хранятся в аккаунте и появятся, когда связь восстановится."}
 });

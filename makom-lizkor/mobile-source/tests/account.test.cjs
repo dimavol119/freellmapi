@@ -64,3 +64,11 @@ test('common email domain typos get a suggestion, real domains do not',()=>{
  for(const [typo,fixed] of [['dima@gmial.com','dima@gmail.com'],['Dima@GMAIL.CON','dima@gmail.com'],['a@gmail.co','a@gmail.com'],['a@hotmial.com','a@hotmail.com'],['a@outlok.com','a@outlook.com'],['a@icloud.co','a@icloud.com'],['a@wala.co.il','a@walla.co.il'],['a@yaho.com','a@yahoo.com']])assert.equal(s(typo),fixed,typo);
  for(const ok of ['a@gmail.com','a@mail.com','a@me.com','a@ymail.com','a@company.co.il','a@example.test','a@university.ac.il','bad-address','a@gmx.net'])assert.equal(s(ok),null,ok);
 });
+test('the installable-app service worker never handles account requests',()=>{
+ const listeners={};const self={location:{origin:'https://app.test'},addEventListener:(n,f)=>listeners[n]=f,skipWaiting(){},clients:{claim(){}}};
+ new Function('self','caches','fetch',fs.readFileSync(path.join(__dirname,'../public/sw.js'),'utf8'))(self,{open:async()=>({put(){},addAll:async()=>{}}),match:async()=>undefined,keys:async()=>[]},async()=>new Response('x'));
+ const handled=(url,method='GET',mode='cors')=>{let used=false;listeners.fetch({request:{url,method,mode},respondWith(p){used=true;Promise.resolve(p).catch(()=>{})},waitUntil(p){Promise.resolve(p).catch(()=>{})}});return used};
+ for(const u of ['https://app.test/api/memories','https://app.test/api/backups/3','https://app.test/api/auth/session'])assert.equal(handled(u),false,u);
+ assert.equal(handled('https://app.test/api/memories','PUT'),false);assert.equal(handled('https://app.test/','POST','navigate'),false);assert.equal(handled('https://other.test/x.js'),false);
+ assert.equal(handled('https://app.test/','GET','navigate'),true);assert.equal(handled('https://app.test/_expo/static/js/web/index-1.js'),true);assert.equal(handled('https://app.test/icon-192.png'),true);
+});

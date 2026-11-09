@@ -6,12 +6,59 @@
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "scheme": "makom-lizkor",
-    "ios": { "supportsTablet": true, "infoPlist": {"CFBundleLocalizations": ["he", "en"]} },
-    "android": { "permissions": ["POST_NOTIFICATIONS"] },
-    "web": { "name": "מקום לזכור", "bundler": "metro", "output": "single" },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "CFBundleLocalizations": [
+          "he",
+          "en",
+          "ru"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.makomlizkor.app"
+    },
+    "android": {
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
+      "package": "com.makomlizkor.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#151417"
+      }
+    },
+    "web": {
+      "name": "מקום לזכור",
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "themeColor": "#111113",
+      "backgroundColor": "#111113",
+      "lang": "he"
+    },
     "plugins": [
-      ["expo-image-picker", {"photosPermission": "בחר תמונות וצילומי מסך שתרצה לשמור בזיכרונות שלך.", "cameraPermission": false, "microphonePermission": false}],
-      ["expo-notifications", {"color": "#f6a15b"}]
-    ]
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "בחר תמונות וצילומי מסך שתרצה לשמור בזיכרונות שלך.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#f6a15b"
+        }
+      ]
+    ],
+    "icon": "./assets/icon.png",
+    "backgroundColor": "#111113",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#151417"
+    }
   }
 }
