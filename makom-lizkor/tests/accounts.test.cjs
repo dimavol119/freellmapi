@@ -142,3 +142,50 @@ test('account deletion also removes objects written by a save that was in flight
  assert.deepEqual([...env.objects.keys()].filter(k=>k.startsWith('users/'+a.data.user.id+'/')),[]);
  const other=await (await handleAccountApi(req('memories','GET',undefined,b.cookie),env)).json();assert.equal(other.items[0].title,'B');
 });
+
+test('registration and reset refuse trivially guessable passwords, sign-in does not',async()=>{
+ const env=bindings();const {weakPassword}=loaded.exports;
+ for(const bad of ['aaaaaaaaaaaa','abababababab','123456789012','098765432109','qwertyuiopas','abcdefghijklmnop','            ','   short    ','me@example.com'])assert.equal(weakPassword(bad,'me@example.com'),true,bad);
+ for(const good of ['Long safe test passphrase!','סיסמה ארוכה וטובה 2026','correct horse battery','Пароль надёжный 42'])assert.equal(weakPassword(good,'me@example.com'),false,good);
+ const r=await handleAccountApi(req('auth/register','POST',{email:'weak@example.com',password:'123456789012'}),env);assert.equal(r.status,400);assert.equal((await r.json()).error,'WEAK_PASSWORD');
+ assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM accounts').get().n,0);
+ // an existing account with an old weak password can still sign in
+ await signup(env,'old@example.com');env.sql.prepare("UPDATE accounts SET password_hash='x' WHERE email='old@example.com'").run();
+ const login=await handleAccountApi(req('auth/login','POST',{email:'old@example.com',password:'aaaaaaaaaaaa'}),env);assert.equal(login.status,401);
+});
+
+test('failed sign-ins are limited per account even when the IP changes, and other accounts are unaffected',async()=>{
+ const env=bindings();await signup(env,'target@example.com');await signup(env,'neighbour@example.com');
+ const attempt=(email,password,ip)=>handleAccountApi(new Request('https://app.test/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json','CF-Connecting-IP':ip},body:JSON.stringify({email,password})}),env);
+ for(let i=0;i<10;i++)assert.equal((await attempt('target@example.com','wrong password number '+i,'10.0.0.'+i)).status,401);
+ assert.equal((await attempt('target@example.com','Long safe test passphrase!','10.0.1.1')).status,429,'even the right password waits after 10 failures');
+ assert.equal((await attempt('neighbour@example.com','Long safe test passphrase!','10.0.1.2')).status,200);
+ env.sql.prepare("DELETE FROM rate_limits WHERE key LIKE 'login-fail:%'").run();
+ assert.equal((await attempt('target@example.com','Long safe test passphrase!','10.0.1.3')).status,200,'after the window the owner signs in');
+});
+
+test('an active session is renewed instead of expiring after 30 days, at most once per half-period',async()=>{
+ const env=bindings(),a=await signup(env,'renew@example.com');
+ const first=await handleAccountApi(req('auth/session','GET',undefined,a.cookie),env);assert.equal(first.headers.get('Set-Cookie'),null,'fresh sessions are not rewritten');
+ const soon=Date.now()+5*86400000;env.sql.prepare('UPDATE sessions SET expires_at=?').run(soon);
+ const r=await handleAccountApi(req('auth/session','GET',undefined,a.cookie),env);assert.equal((await r.json()).user.email,'renew@example.com');
+ const cookie=r.headers.get('Set-Cookie');assert.match(cookie,/Max-Age=2592000/);assert.match(cookie,/HttpOnly/);assert.equal(cookie.split(';')[0],a.cookie.split(';')[0],'same token, no new session row');
+ assert.ok(env.sql.prepare('SELECT expires_at e FROM sessions').get().e>Date.now()+29*86400000);assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM sessions').get().n,1);
+ env.sql.prepare('UPDATE sessions SET expires_at=?').run(Date.now()-1);
+ assert.equal((await (await handleAccountApi(req('auth/session','GET',undefined,a.cookie),env)).json()).user,null,'an expired session is never revived');
+});
+
+test('weak-password attempts do not use up the hourly registration limit',async()=>{
+ const env=bindings();
+ for(let i=0;i<8;i++)assert.equal((await handleAccountApi(req('auth/register','POST',{email:'try'+i+'@example.com',password:'aaaaaaaaaaaa'}),env)).status,400);
+ await signup(env,'finally@example.com');
+});
+
+test('signing in over another session ends the previous session token',async()=>{
+ const env=bindings(),a=await signup(env,'first@example.com');await signup(env,'second@example.com');
+ const before=env.sql.prepare('SELECT COUNT(*) n FROM sessions').get().n;
+ const r=await handleAccountApi(req('auth/login','POST',{email:'second@example.com',password:'Long safe test passphrase!'},a.cookie),env);assert.equal(r.status,200);
+ assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM sessions').get().n,before);
+ assert.equal((await (await handleAccountApi(req('auth/session','GET',undefined,a.cookie),env)).json()).user,null,'the old cookie no longer opens the first account');
+ const now=await (await handleAccountApi(req('auth/session','GET',undefined,r.headers.get('Set-Cookie')),env)).json();assert.equal(now.user.email,'second@example.com');
+});

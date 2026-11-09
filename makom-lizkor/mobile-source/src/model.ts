@@ -44,3 +44,7 @@ export function isMemory(value:unknown):value is Memory{
 }
 
 
+/** Marks which items have a reminder scheduled on this device; an unreadable notification list leaves the flags off. */
+export function withDeviceReminders(items:Memory[],scheduled:Set<string>):Memory[]{return items.map(i=>({...i,notificationScheduled:scheduled.has(i.id)&&!i.done}));}
+/** Items saved on this device without an account that are not in the account yet and were not handled before. */
+export function pendingDeviceItems(local:Memory[],account:Memory[],handled:string[]):Memory[]{const known=new Set([...account.map(i=>i.id),...handled]);return local.filter(i=>!known.has(i.id));}

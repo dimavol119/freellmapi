@@ -42,3 +42,25 @@ test('a save that changes nothing for the account sends no request and keeps the
 test('photos are scaled down to fit the account limit, never up, and GIFs or small files are kept',()=>{const size=load('image-size');
  assert.deepEqual(size.fitSize(4032,3024),{width:1600,height:1200});assert.deepEqual(size.fitSize(3024,4032),{width:1200,height:1600});assert.deepEqual(size.fitSize(800,600),{width:800,height:600});assert.deepEqual(size.fitSize(0,10),{width:0,height:0});assert.deepEqual(size.fitSize(20000,10),{width:1600,height:1});
  const big='A'.repeat(800*1024);assert.equal(size.shouldShrink('data:image/jpeg;base64,'+big),true);assert.equal(size.shouldShrink('data:image/png;base64,'+big),true);assert.equal(size.shouldShrink('data:image/gif;base64,'+big),false);assert.equal(size.shouldShrink('data:image/jpeg;base64,AAAA'),false);assert.equal(size.shouldShrink('file:///x.jpg'),false)});
+test('new passwords use the same guessability rule as the server; sign-in does not',async()=>{
+ const bad=['aaaaaaaaaaaa','abababababab','123456789012','098765432109','qwertyuiopas','abcdefghijklmnop','            ','   short    ','me@example.com'];
+ const good=['Long safe test passphrase!','סיסמה ארוכה וטובה 2026','correct horse battery','Пароль надёжный 42'];
+ for(const p of bad)assert.ok(validation.strongPasswordError(p,'Me@Example.com '),p);for(const p of good)assert.equal(validation.strongPasswordError(p,'me@example.com'),null,p);
+ // the server runs the same rule (kept in lib/account-api.ts): compare on the same inputs
+ const ts=require('typescript');const src=fs.readFileSync(path.join(__dirname,'../../lib/account-api.ts'),'utf8');const fn=src.slice(src.indexOf('export function weakPassword'),src.indexOf('async function loginFailures'));
+ const m={exports:{}};new Function('exports','module',ts.transpileModule(fn,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(m.exports,m);
+ for(const p of [...bad,...good,'a'.repeat(30),'Zz9!Zz9!Zz9!'])assert.equal(m.exports.weakPassword(p,'me@example.com'),validation.strongPasswordError(p,'me@example.com')!==null,p);
+ const original=global.fetch;let calls=0;global.fetch=async()=>{calls++;return Response.json({user:{id:'u',email:'me@example.com'}})};
+ try{const a=service();await assert.rejects(a.authenticate('register','me@example.com','123456789012'),e=>e.code===validation.WEAK_PASSWORD_MESSAGE);assert.equal(calls,0);
+  await a.authenticate('login','me@example.com','aaaaaaaaaaaa');assert.equal(calls,1,'sign-in with an old weak password is still sent');
+  assert.equal(a.accountErrorMessage(new a.AccountError('WEAK_PASSWORD')),validation.WEAK_PASSWORD_MESSAGE);assert.equal(a.accountErrorMessage(new a.AccountError(validation.WEAK_PASSWORD_MESSAGE)),validation.WEAK_PASSWORD_MESSAGE)}finally{global.fetch=original}});
+test('device reminder flags come from the device, and only unhandled device items are offered to the account',()=>{
+ const model=load('model');const item=(id,extra={})=>({id,title:id,note:'',why:'',intent:'',topic:'אישי',location:'',due:'',birthday:'',images:[],done:false,createdAt:1,notificationScheduled:false,...extra});
+ const marked=model.withDeviceReminders([item('a'),item('b'),item('c',{done:true})],new Set(['a','c']));assert.deepEqual(marked.map(i=>i.notificationScheduled),[true,false,false]);
+ const pending=model.pendingDeviceItems([item('a'),item('local-1'),item('local-2'),item('old')],[item('a')],['old']);assert.deepEqual(pending.map(i=>i.id),['local-1','local-2']);
+ assert.deepEqual(model.pendingDeviceItems([],[item('a')],[]),[]);});
+test('common email domain typos get a suggestion, real domains do not',()=>{
+ const s=validation.emailSuggestion;
+ for(const [typo,fixed] of [['dima@gmial.com','dima@gmail.com'],['Dima@GMAIL.CON','dima@gmail.com'],['a@gmail.co','a@gmail.com'],['a@hotmial.com','a@hotmail.com'],['a@outlok.com','a@outlook.com'],['a@icloud.co','a@icloud.com'],['a@wala.co.il','a@walla.co.il'],['a@yaho.com','a@yahoo.com']])assert.equal(s(typo),fixed,typo);
+ for(const ok of ['a@gmail.com','a@mail.com','a@me.com','a@ymail.com','a@company.co.il','a@example.test','a@university.ac.il','bad-address','a@gmx.net'])assert.equal(s(ok),null,ok);
+});

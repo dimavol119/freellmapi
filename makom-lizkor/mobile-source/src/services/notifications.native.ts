@@ -14,3 +14,5 @@ export async function scheduleReminder(memory:Memory):Promise<boolean>{
   await cancelReminder(memory.id);
   await Notifications.scheduleNotificationAsync({identifier:'memory-'+memory.id,content:{title:memory.topic==='ימי הולדת'?'יום הולדת · '+memory.title:memory.title,body:memory.intent||memory.note||memory.why||'זמן לחזור למה ששמרת',sound:memory.reminderSound===false?false:true,data:{memoryId:memory.id}},trigger});return true;
 }
+/** Ids of memories with a reminder scheduled on this device. The account never stores this per-device state. */
+export async function scheduledReminderIds():Promise<Set<string>>{const scheduled=await Notifications.getAllScheduledNotificationsAsync();return new Set(scheduled.map(n=>n.identifier).filter(id=>id.startsWith('memory-')).map(id=>id.slice('memory-'.length)));}

@@ -1,5 +1,19 @@
 # Makom Lizkor — project handoff (updated 2026-11-09)
 
+## Registration and sign-in update (2026-11-09, second round)
+
+- **New passwords must not be trivially guessable** (`weakPassword` in `lib/account-api.ts`, same rule in `strongPasswordError` in `auth-validation.ts`; a client test compares both): one repeated pattern (fewer than 5 distinct characters), keyboard/digit/alphabet runs, padding with spaces, or the email itself → `WEAK_PASSWORD`. Applies to registration and password reset only; existing users still sign in with old passwords. Checked before the hourly registration limit, so weak attempts do not lock anyone out.
+- **Per-account limit on failed sign-ins:** 10 per 15 minutes per email (in addition to the per-IP limit), even across changing IPs. Successful sign-ins are not counted; other accounts are unaffected.
+- **Sliding session renewal:** `GET /api/auth/session` extends a session with less than 15 days left back to 30 days (same token, same row). An expired session is never revived.
+- **Signing in over another session in the same browser deletes the previous session row.**
+- **Email typo suggestion at registration** (`emailSuggestion`): e.g. `gmial.com` → `gmail.com`, with a one-tap fix. There is no email verification, so a mistyped address could never receive a reset code.
+- **Phone keyboards:** Next moves between fields; Go/Enter submits registration, sign-in and reset.
+- **Sign-in tab by default** on a device that has signed in before (`@makom-lizkor/signed-in-before`, no personal data).
+- **Items saved on the device before registering are offered to the account** with a banner at the top (add / not now). Additive; per-user "handled" ids are stored on the device (`@makom-lizkor/device-items-handled/<userId>`), so a second person on the same device is asked separately and nothing moves between accounts automatically.
+- **Native reminder status:** the account never stored which reminders are scheduled on a device, so every launch on a phone showed "notification not set". The app now reads the device's scheduled notifications (`scheduledReminderIds`) on load and background refresh.
+
+Validation: 37 server tests, 48 client tests, both TypeScript checks, Expo web export and server build pass. Browser QA with Playwright emulating Pixel 7 and iPhone 13 against local wrangler D1/R2 with synthetic accounts (local state deleted): guest item → register (typo suggestion fixed, weak password refused with no account created, Enter submits) → banner → items moved → banner stays gone after reload → sign out → sign-in tab opens by default → Enter signs in. Native notification reading was type-checked only (no device here).
+
 ## Reliability update (2026-11-09)
 
 Fixes found by code review and reproduced with tests (each new test fails on the previous code):
@@ -12,9 +26,9 @@ Fixes found by code review and reproduced with tests (each new test fails on the
 
 No schema change, no migration, no new service, secret or paid API. Server API stays backward compatible (`unchanged` is an extra field).
 
-Validation: 32 server tests and 45 client tests pass; TypeScript passes in both projects; Expo web export and server build pass. Local browser QA (wrangler local D1/R2, synthetic `@example.test` accounts, local state deleted afterwards) at 390×844, 412×915 and 1280×900: registration, saving a 12 MB photo (stored 1600×1200), a phone and a desktop session of the same account editing concurrently (CONFLICT → merged, both changes kept), a second account seeing no items/versions of the first (404 on its version), and the close-tab warning. No production data was touched. Real Galaxy/iPhone hardware and native builds were not exercised.
+Validation (first round): 32 server tests and 45 client tests pass; TypeScript passes in both projects; Expo web export and server build pass. Local browser QA (wrangler local D1/R2, synthetic `@example.test` accounts, local state deleted afterwards) at 390×844, 412×915 and 1280×900: registration, saving a 12 MB photo (stored 1600×1200), a phone and a desktop session of the same account editing concurrently (CONFLICT → merged, both changes kept), a second account seeing no items/versions of the first (404 on its version), and the close-tab warning. No production data was touched. Real Galaxy/iPhone hardware and native builds were not exercised.
 
-Release: `public/` already contains the new web export (`index-981d87f9….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
+Release: `public/` already contains the new web export (`index-ab7c7a6d….js`); older bundles are kept so open tabs keep working. Run the server build and publish as before.
 
 ## Storage and recovery update
 

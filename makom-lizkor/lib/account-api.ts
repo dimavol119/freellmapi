@@ -1,6 +1,6 @@
 import {createRemoteJWKSet,jwtVerify} from 'jose';
 type Bindings={GOOGLE_CLIENT_ID?:string;GOOGLE_CLIENT_SECRET?:string;GOOGLE_SITE_ORIGIN?:string;GOOGLE_LOGIN_ENABLED?:string;DB?:D1Database;BUCKET?:R2Bucket;FACEBOOK_APP_ID?:string;FACEBOOK_APP_SECRET?:string;FACEBOOK_GRAPH_VERSION?:string;FACEBOOK_SITE_ORIGIN?:string;FACEBOOK_LOGIN_ENABLED?:string;PASSWORD_RESET_ENABLED?:string;PASSWORD_RESET_PROVIDER?:string;BREVO_API_KEY?:string;RESEND_API_KEY?:string;RESET_FROM_EMAIL?:string};
-type Account={id:string;email:string;salt:string;password_hash:string;workspace_key:string|null;revision:number};
+type Account={id:string;email:string;salt:string;password_hash:string;workspace_key:string|null;revision:number;session_expires?:number};
 const encoder=new TextEncoder();const LIMIT=20*1024*1024;
 const hex=(bytes:ArrayBuffer|Uint8Array)=>Array.from(bytes instanceof Uint8Array?bytes:new Uint8Array(bytes)).map(v=>v.toString(16).padStart(2,'0')).join('');
 const random=()=>hex(crypto.getRandomValues(new Uint8Array(32)));
@@ -12,6 +12,13 @@ const sessionCookie=(token:string,secure:boolean,maxAge=2592000)=>'makom_session
 async function body(request:Request):Promise<Record<string,unknown>>{if(!request.headers.get('Content-Type')?.startsWith('application/json'))throw Error('TYPE');const raw=await request.text();if(encoder.encode(raw).byteLength>LIMIT)throw Error('SIZE');const value=JSON.parse(raw);if(!value||typeof value!=='object'||Array.isArray(value))throw Error('BODY');return value}
 async function rate(db:D1Database,key:string,limit:number,seconds=900){const now=Math.floor(Date.now()/1000),bucket=Math.floor(now/seconds),id=key+':'+bucket;const result=await db.prepare('INSERT INTO rate_limits (key,attempts,expires_at) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(id,now+seconds).first<{attempts:number}>();return (result?.attempts||0)<=limit}
 const RESET_TTL=900000;
+const DAY=86400000,SESSION_TTL=30*DAY,SESSION_RENEW_BELOW=15*DAY,LOGIN_FAILURES=10,LOGIN_WINDOW=900;
+/** Rejects passwords that are long enough but trivially guessable. Applies to new passwords only, never to sign-in. */
+export function weakPassword(password:string,email:string){
+ const lower=password.toLowerCase(),rows=['0123456789'.repeat(4),'9876543210'.repeat(4),'qwertyuiopasdfghjklzxcvbnm','abcdefghijklmnopqrstuvwxyz'];
+ return password.trim().length<12||new Set(lower).size<5||lower.trim()===email||rows.some(r=>r.includes(lower));
+}
+async function loginFailures(db:D1Database,email:string){const now=Math.floor(Date.now()/1000);const row=await db.prepare('SELECT attempts FROM rate_limits WHERE key=?').bind('login-fail:'+await hash(email)+':'+Math.floor(now/LOGIN_WINDOW)).first<{attempts:number}>();return row?.attempts||0}
 type ResetConfig={provider:'resend'|'brevo';key:string;from:string};
 function resetConfig(b:Bindings):ResetConfig|null{
  if(b.PASSWORD_RESET_ENABLED!=='true'||!b.RESET_FROM_EMAIL||b.RESET_FROM_EMAIL.length>=200||! /^[^\r\n]+$/.test(b.RESET_FROM_EMAIL))return null;
@@ -41,8 +48,10 @@ async function deleteAccountData(account:Account,db:D1Database,bucket:R2Bucket){
  // save can succeed; sweep once more so no copy of the deleted user's data stays behind.
  await deleteUserObjects(account.id,bucket).catch(()=>console.error('account cleanup sweep failed'));
 }
-async function authenticated(request:Request,db:D1Database){const token=request.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!token)return null;return db.prepare('SELECT a.* FROM accounts a JOIN sessions s ON s.user_id=a.id WHERE s.token_hash=? AND s.expires_at>?').bind(await hash(token),Date.now()).first<Account>()}
-async function startSession(account:Account,db:D1Database,secure:boolean){const token=random();await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)').bind(await hash(token),account.id,Date.now()+2592000000).run();return json({user:{id:account.id,email:account.email}},200,sessionCookie(token,secure))}
+async function authenticated(request:Request,db:D1Database){const token=request.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!token)return null;return db.prepare('SELECT a.*,s.expires_at AS session_expires FROM accounts a JOIN sessions s ON s.user_id=a.id WHERE s.token_hash=? AND s.expires_at>?').bind(await hash(token),Date.now()).first<Account>()}
+async function startSession(account:Account,db:D1Database,secure:boolean,request?:Request){const token=random();
+ // Signing in over another session in this browser ends that session, so its token does not stay valid in the database.
+ const previous=request?.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(previous)await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(previous)).run();await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)').bind(await hash(token),account.id,Date.now()+SESSION_TTL).run();return json({user:{id:account.id,email:account.email}},200,sessionCookie(token,secure))}
 const historyPrefix=(id:string)=>'users/'+id+'/history/';
 const historyKey=(id:string,revision:number)=>historyPrefix(id)+String(revision).padStart(16,'0')+'.json';
 async function historyVersions(bucket:R2Bucket,id:string){
@@ -68,13 +77,16 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||password.length<12||password.length>128)return json({error:'INVALID_CREDENTIAL_FORMAT'},400);
   const existing=await db.prepare('SELECT * FROM accounts WHERE email=?').bind(email).first<Account>();
   if(path.endsWith('register')){
+   if(weakPassword(password,email))return json({error:'WEAK_PASSWORD'},400);
    if(!await rate(db,'signup:'+await hash(ip),5,3600))return json({error:'TOO_MANY_ATTEMPTS'},429);
    if(existing)return json({error:'EMAIL_IN_USE'},409);const salt=random(),id=crypto.randomUUID(),derived=await passwordHash(password,salt);
    try{await db.prepare('INSERT INTO accounts(id,email,salt,password_hash,revision,created_at) VALUES (?,?,?,?,0,?)').bind(id,email,salt,derived,Date.now()).run()}catch(e){if(String(e).includes('UNIQUE'))return json({error:'EMAIL_IN_USE'},409);throw e}
-   return await startSession({id,email,salt,password_hash:derived,workspace_key:null,revision:0},db,secure);
+   return await startSession({id,email,salt,password_hash:derived,workspace_key:null,revision:0},db,secure,request);
   }
-  const derived=await passwordHash(password,existing?.salt||'00000000000000000000000000000000');if(!existing||!same(derived,existing.password_hash))return json({error:'INVALID_LOGIN'},401);
-  return await startSession(existing,db,secure);
+  // Per-account limit on failed sign-ins, in addition to the per-IP limit, so changing IP does not allow unlimited guessing.
+  if(await loginFailures(db,email)>=LOGIN_FAILURES)return json({error:'TOO_MANY_ATTEMPTS'},429);
+  const derived=await passwordHash(password,existing?.salt||'00000000000000000000000000000000');if(!existing||!same(derived,existing.password_hash)){await rate(db,'login-fail:'+await hash(email),LOGIN_FAILURES,LOGIN_WINDOW);return json({error:'INVALID_LOGIN'},401)}
+  return await startSession(existing,db,secure,request);
  }
  if(path==='/api/auth/forgot'||path==='/api/auth/reset'){
   if(request.method!=='POST')return json({error:'METHOD'},405);
@@ -92,6 +104,7 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   if(!await rate(db,'reset-ip:'+ip,20))return json({error:'TOO_MANY_ATTEMPTS'},429);
   const code=typeof data.code==='string'?data.code.trim():'',password=typeof data.password==='string'?data.password:'';
   if(!/^\d{8}$/.test(code)||password.length<12||password.length>128)return json({error:'INVALID_CREDENTIAL_FORMAT'},400);
+  if(weakPassword(password,email))return json({error:'WEAK_PASSWORD'},400);
   const attempt=await db.prepare('UPDATE password_resets SET attempts=attempts+1 WHERE email=? AND expires_at>? RETURNING code_hash,attempts').bind(email,Date.now()).first<{code_hash:string;attempts:number}>();
   if(!attempt||attempt.attempts>5||!same(await resetHash(email,code),attempt.code_hash))return json({error:'INVALID_CODE'},400);
   const owner=await db.prepare('SELECT id FROM accounts WHERE email=?').bind(email).first<{id:string}>();if(!owner)return json({error:'INVALID_CODE'},400);
@@ -102,7 +115,15 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   return json({ok:true});
  }
  const account=await authenticated(request,db);
- if(path==='/api/auth/session'&&request.method==='GET')return json({user:account?{id:account.id,email:account.email}:null});
+ if(path==='/api/auth/session'&&request.method==='GET'){
+  // Sliding renewal: an active user is not signed out every 30 days. Renewed at most once per 15 days per session.
+  const token=request.headers.get('Cookie')?.match(/(?:^|;\s*)makom_session=([a-f0-9]{64})(?:;|$)/)?.[1];
+  if(account&&token&&typeof account.session_expires==='number'&&account.session_expires-Date.now()<SESSION_RENEW_BELOW){
+   const renewed=await db.prepare('UPDATE sessions SET expires_at=? WHERE token_hash=? AND user_id=? RETURNING expires_at').bind(Date.now()+SESSION_TTL,await hash(token),account.id).first().catch(()=>null);
+   if(renewed)return json({user:{id:account.id,email:account.email}},200,sessionCookie(token,secure));
+  }
+  return json({user:account?{id:account.id,email:account.email}:null});
+ }
  if(!account)return json({error:'SIGN_IN_REQUIRED'},401);
  // A cookie may change in another tab. Never apply the old tab's data to the new account.
  const expectedUser=request.headers.get('X-Makom-User');

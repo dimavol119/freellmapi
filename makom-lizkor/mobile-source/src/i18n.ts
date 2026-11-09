@@ -477,5 +477,12 @@ Object.assign(translations,{
   "לא ניתן לקרוא את השמירה הקודמת. הנתונים לא הוחלפו. נסה שוב.": {
     "en": "The previous save could not be read. Data was not replaced. Try again.",
     "ru": "Не удалось прочитать предыдущее сохранение. Данные не заменены. Повторите попытку."
-  }
+  },
+  "פריטים מהמכשיר הזה": {"en": "Items on this device", "ru": "Записи на этом устройстве"},
+  "נמצאו פריטים שנשמרו במכשיר הזה בלי חשבון:": {"en": "Items saved on this device without an account:", "ru": "Записи, сохранённые на этом устройстве без аккаунта:"},
+  "אפשר להוסיף אותם לחשבון. הפריטים שכבר בחשבון לא ישתנו.": {"en": "You can add them to your account. Items already in the account will not change.", "ru": "Их можно добавить в аккаунт. Записи, уже находящиеся в аккаунте, не изменятся."},
+  "לא עכשיו": {"en": "Not now", "ru": "Не сейчас"},
+  "הסיסמה קלה מדי לניחוש. אפשר להשתמש במשפט קצר שקל לך לזכור.": {"en": "This password is too easy to guess. Try a short sentence you can remember.", "ru": "Этот пароль слишком легко угадать. Используйте короткую фразу, которую легко запомнить."},
+  "האם התכוונת ל־": {"en": "Did you mean ", "ru": "Возможно, вы имели в виду "},
+  "תיקון האימייל": {"en": "Fix the email", "ru": "Исправить адрес"}
 });
