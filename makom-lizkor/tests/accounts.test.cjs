@@ -284,3 +284,80 @@ test('friends behind one shared mobile or home address can all register, and the
  let last;for(let i=15;i<25;i++)last=(await handleAccountApi(req('auth/register','POST',{email:'friend'+i+'@example.com',password:'Long safe test passphrase!'}),env)).status;
  assert.equal(last,429,'mass registration from one address is still stopped');
 });
+
+// ---- Security review: each defence is exercised with a real attempt ----
+const PNG='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const raw=(path,init)=>handleAccountApi(new Request('https://app.test/api/'+path,init),bindings());
+test('every API response carries security headers and no CORS permission',async()=>{
+ const env=bindings();const r=await handleAccountApi(req('auth/session'),env);
+ for(const [h,v] of [['x-frame-options','DENY'],['x-content-type-options','nosniff'],['referrer-policy','no-referrer'],['cache-control','no-store'],['cross-origin-resource-policy','same-origin']])assert.equal(r.headers.get(h),v,h);
+ assert.match(r.headers.get('content-security-policy'),/default-src 'none'/);assert.match(r.headers.get('strict-transport-security'),/max-age=31536000/);
+ assert.equal(r.headers.get('access-control-allow-origin'),null);
+ for(const method of ['OPTIONS','DELETE','PATCH']){const x=await handleAccountApi(new Request('https://app.test/api/memories',{method,headers:{Origin:'https://evil.example','Access-Control-Request-Method':'PUT'}}),env);assert.equal(x.status,405,method);assert.equal(x.headers.get('access-control-allow-origin'),null)}
+});
+test('plain HTTP is refused outside local development',async()=>{
+ const env=bindings();
+ assert.equal((await handleAccountApi(new Request('http://makom.example/api/auth/session'),env)).status,403);
+ assert.equal((await handleAccountApi(new Request('http://127.0.0.1:8787/api/auth/session'),env)).status,200);
+});
+test('cross-site and form-style requests cannot change anything (CSRF)',async()=>{
+ const env=bindings(),a=await signup(env,'csrf@example.com');
+ const put=(headers)=>handleAccountApi(new Request('https://app.test/api/memories',{method:'PUT',headers:{'Content-Type':'application/json',Cookie:a.cookie,...headers},body:JSON.stringify({items:[note],revision:0})}),env);
+ assert.equal((await put({'Sec-Fetch-Site':'cross-site'})).status,403);
+ assert.equal((await put({'Sec-Fetch-Site':'same-site'})).status,403,'a sibling subdomain is another site');
+ assert.equal((await put({Origin:'https://evil.example'})).status,403);
+ // a classic HTML form can only send text/plain or form encodings
+ const form=await handleAccountApi(new Request('https://app.test/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Cookie:a.cookie},body:'x=1'}),env);assert.equal(form.status,415);
+ assert.equal((await handleAccountApi(req('auth/session','GET',undefined,a.cookie),env).then(r=>r.json())).user.email,'csrf@example.com','still signed in');
+ assert.equal(env.objects.size,0,'nothing was written');
+ assert.equal((await put({'Sec-Fetch-Site':'same-origin',Origin:'https://app.test'})).status,200,'the site itself still works');
+});
+test('uploaded images must really be images and not too large; older stored items never block saving',async()=>{
+ const env=bindings(),a=await signup(env,'images@example.com');
+ const save=(items,revision)=>handleAccountApi(req('memories','PUT',{items,revision},a.cookie),env);
+ const disguised='data:image/png;base64,'+Buffer.from('<html><script>alert(1)</script></html>').toString('base64');
+ const r=await save([{...note,images:[disguised]}],0);assert.equal(r.status,400);assert.equal((await r.json()).error,'INVALID_IMAGE');
+ const huge='data:image/jpeg;base64,/9j/'+'A'.repeat(10_000_001);assert.equal((await save([{...note,images:[huge]}],0)).status,400);
+ assert.equal((await save([{...note,images:[PNG]}],0)).status,200,'a real PNG is accepted');
+ // an item stored before this check existed (simulated) keeps working when other items change
+ const stored=[...env.objects.entries()].find(([k])=>!k.includes('/history/'));const legacy=[{...note,images:[disguised]}];env.objects.set(stored[0],JSON.stringify(legacy));
+ assert.equal((await save([...legacy,{...note,id:'new',title:'new'}],1)).status,200);
+});
+test('sign out everywhere ends every session of the account only',async()=>{
+ const env=bindings(),a=await signup(env,'everywhere@example.com'),other=await signup(env,'bystander@example.com');
+ const second=(await handleAccountApi(req('auth/login','POST',{email:'everywhere@example.com',password:'Long safe test passphrase!'}),env)).headers.get('Set-Cookie');
+ const r=await handleAccountApi(req('auth/logout-all','POST',{},a.cookie),env);assert.equal(r.status,200);assert.match(r.headers.get('Set-Cookie'),/Max-Age=0/);
+ for(const c of [a.cookie,second])assert.equal((await (await handleAccountApi(req('auth/session','GET',undefined,c),env)).json()).user,null);
+ assert.equal((await (await handleAccountApi(req('auth/session','GET',undefined,other.cookie),env)).json()).user.email,'bystander@example.com');
+});
+test('session cookies are HttpOnly, Secure, SameSite and tokens are stored only as hashes',async()=>{
+ const env=bindings(),a=await signup(env,'cookie@example.com');
+ assert.match(a.cookie,/HttpOnly/);assert.match(a.cookie,/Secure/);assert.match(a.cookie,/SameSite=Lax/);assert.match(a.cookie,/Path=\//);
+ const token=a.cookie.match(/makom_session=([a-f0-9]{64})/)[1];
+ assert.equal(env.sql.prepare('SELECT COUNT(*) n FROM sessions WHERE token_hash=?').get(token).n,0,'the raw token is never stored');
+ const row=env.sql.prepare("SELECT salt,password_hash FROM accounts WHERE email='cookie@example.com'").get();assert.match(row.password_hash,/^[a-f0-9]{64}$/);assert.equal(row.salt.length,64);assert.ok(!JSON.stringify(row).includes('Long safe'));
+});
+test('reading is rate limited per account',async()=>{
+ const env=bindings(),a=await signup(env,'reader@example.com');let last;
+ for(let i=0;i<601;i++)last=(await handleAccountApi(req('memories','GET',undefined,a.cookie),env)).status;
+ assert.equal(last,429);
+});
+test('security log records attacks without emails, passwords, codes or IP addresses',async()=>{
+ const env=bindings();await signup(env,'logged@example.com');const lines=[];const original=console.warn;console.warn=l=>lines.push(String(l));
+ try{
+  for(let i=0;i<11;i++)await handleAccountApi(req('auth/login','POST',{email:'logged@example.com',password:'Wrong password number '+i}),env);
+  await handleAccountApi(new Request('https://app.test/api/memories',{method:'PUT',headers:{'Content-Type':'application/json','Sec-Fetch-Site':'cross-site'},body:'{}'}),env);
+ }finally{console.warn=original}
+ const events=lines.map(l=>JSON.parse(l).security);
+ for(const e of ['login_failed','login_locked','cross_site_blocked'])assert.ok(events.includes(e),e);
+ const all=lines.join('\n');for(const secret of ['logged@example.com','Wrong password','127.0.0.1'])assert.ok(!all.includes(secret),secret);
+});
+test('the failed sign-in limit cannot be doubled at a time-window boundary',async()=>{
+ const env=bindings();await signup(env,'boundary@example.com');const realNow=Date.now;
+ const attempt=p=>handleAccountApi(req('auth/login','POST',{email:'boundary@example.com',password:p}),env);
+ const end=Math.floor(realNow()/900000)*900000+899000;
+ try{Date.now=()=>end;for(let i=0;i<10;i++)assert.equal((await attempt('Wrong password number '+i)).status,401);
+  Date.now=()=>end+2000;assert.equal((await attempt('Another wrong password')).status,429,'the next window still counts the previous failures');
+  Date.now=()=>end+2000+900000;assert.equal((await attempt('Long safe test passphrase!')).status,200,'after the window passes the owner signs in');
+ }finally{Date.now=realNow}
+});

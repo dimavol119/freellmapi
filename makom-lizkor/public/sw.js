@@ -1,7 +1,7 @@
 // Makom Lizkor service worker: lets the site open as an installed app and load quickly.
 // Privacy rule: account data is NEVER cached. Anything under /api/ goes straight to the network.
-const VERSION='makom-shell-v3';
-const STATIC=['/manifest.webmanifest','/icon-192.png','/icon-512.png','/apple-touch-icon.png','/favicon.svg','/fonts/assistant-hebrew-400-normal.woff2','/fonts/assistant-hebrew-700-normal.woff2','/fonts/frank-ruhl-libre-hebrew-700-normal.woff2'];
+const VERSION='makom-shell-v4';
+const STATIC=['/manifest.webmanifest','/register-sw.js','/icon-192.png','/icon-512.png','/apple-touch-icon.png','/favicon.svg','/fonts/assistant-hebrew-400-normal.woff2','/fonts/assistant-hebrew-700-normal.woff2','/fonts/frank-ruhl-libre-hebrew-700-normal.woff2'];
 // Stores the start page together with exactly the scripts it references (from the same response), so an
 // offline start never pairs a page with a missing or different script. Scripts of older releases are dropped.
 async function storeShell(response){

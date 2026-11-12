@@ -1,6 +1,13 @@
 import {Memory,isMemory} from './model';
 export const BACKUP_LIMIT=32*1024*1024;
 const imageData=/^data:image\/(png|jpe?g|webp|gif|heic|heif);base64,[a-zA-Z0-9+/=\r\n]+$/;
+/** Same rule as the server: the first bytes must be a real PNG, JPEG, GIF, WebP or HEIC image, at most ~7.5 MB. */
+export function realImage(uri:string):boolean{
+ const comma=uri.indexOf(',');if(!imageData.test(uri)||uri.length>10_000_000)return false;
+ let head:string;try{head=atob(uri.slice(comma+1,comma+25).replace(/[\r\n]/g,''))}catch{return false}
+ const b=(i:number)=>head.charCodeAt(i);
+ return (b(0)===0x89&&head.slice(1,4)==='PNG')||(b(0)===0xff&&b(1)===0xd8&&b(2)===0xff)||head.startsWith('GIF8')||(head.startsWith('RIFF')&&head.slice(8,12)==='WEBP')||head.slice(4,8)==='ftyp';
+}
 export function parseBackup(text:string):Memory[]{
  if(new TextEncoder().encode(text).length>BACKUP_LIMIT)throw Error('BACKUP_TOO_LARGE');
  let data:unknown;try{data=JSON.parse(text)}catch{throw Error('INVALID_BACKUP')}
@@ -8,7 +15,7 @@ export function parseBackup(text:string):Memory[]{
  if(!value||value.version!==1||!Array.isArray(value.items)||value.items.length>2000)throw Error('INVALID_BACKUP');
  const ids=new Set<string>();
  return value.items.map(item=>{
-  if(!isMemory(item)||!item.id||item.id.length>160||ids.has(item.id)||item.images.length>30||!item.images.every(uri=>imageData.test(uri))||['title','note','why','intent','topic','location','due','birthday'].some(k=>(item[k as keyof Memory] as string).length>=30000)||(item.reminderSound!==undefined&&typeof item.reminderSound!=='boolean')||(item.remindBeforeDays!==undefined&&![0,1].includes(item.remindBeforeDays)))throw Error('INVALID_BACKUP');
+  if(!isMemory(item)||!item.id||item.id.length>160||ids.has(item.id)||item.images.length>30||!item.images.every(realImage)||['title','note','why','intent','topic','location','due','birthday'].some(k=>(item[k as keyof Memory] as string).length>=30000)||(item.reminderSound!==undefined&&typeof item.reminderSound!=='boolean')||(item.remindBeforeDays!==undefined&&![0,1].includes(item.remindBeforeDays)))throw Error('INVALID_BACKUP');
   ids.add(item.id);return {...item,notificationScheduled:false};
  });
 }

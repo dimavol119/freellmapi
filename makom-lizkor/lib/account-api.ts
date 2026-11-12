@@ -7,10 +7,25 @@ const random=()=>hex(crypto.getRandomValues(new Uint8Array(32)));
 async function hash(value:string){return hex(await crypto.subtle.digest('SHA-256',encoder.encode(value)))}
 async function passwordHash(password:string,salt:string){const key=await crypto.subtle.importKey('raw',encoder.encode(password),'PBKDF2',false,['deriveBits']);return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:encoder.encode(salt),iterations:100000},key,256))}
 function same(a:string,b:string){let diff=a.length^b.length;for(let i=0;i<Math.max(a.length,b.length);i++)diff|=(a.charCodeAt(i)||0)^(b.charCodeAt(i)||0);return diff===0}
-function json(data:unknown,status=200,cookie?:string){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...(cookie?{'Set-Cookie':cookie}:{})}})}
+/** Headers on every API response: never cached, never sniffed, never framed, no referrer, readable only by this site. */
+const SECURITY_HEADERS={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'",'Cross-Origin-Resource-Policy':'same-origin','Strict-Transport-Security':'max-age=31536000; includeSubDomains'};
+function json(data:unknown,status=200,cookie?:string){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json',...SECURITY_HEADERS,...(cookie?{'Set-Cookie':cookie}:{})}})}
+/** Security event log (Cloudflare logs). Never contains emails, IPs, passwords, codes or tokens: only short one-way tags. */
+function securityEvent(kind:string,fields:Record<string,unknown>={}){console.warn(JSON.stringify({security:kind,at:new Date().toISOString(),...fields}))}
+const tag=async(value:string)=>(await hash('log:'+value)).slice(0,12);
+/** Uploaded images must really be images (checked by their first bytes), and at most ~7.5 MB each. */
+const MAX_IMAGE_CHARS=10_000_000;
+function realImage(uri:string){
+ const comma=uri.indexOf(',');if(comma<0||uri.length>MAX_IMAGE_CHARS)return false;
+ let head:string;try{head=atob(uri.slice(comma+1,comma+1+24).replace(/[\r\n]/g,''))}catch{return false}
+ const b=(i:number)=>head.charCodeAt(i);
+ return (b(0)===0x89&&head.slice(1,4)==='PNG')||(b(0)===0xff&&b(1)===0xd8&&b(2)===0xff)||head.startsWith('GIF8')||(head.startsWith('RIFF')&&head.slice(8,12)==='WEBP')||head.slice(4,8)==='ftyp';
+}
+/** Only images that are new in this save are inspected, so an older stored item can never block saving. */
+function newImagesValid(items:Record<string,unknown>[],previous:Record<string,unknown>[]){const known=new Set(previous.flatMap(i=>i.images as string[]));return items.every(i=>(i.images as string[]).every(uri=>known.has(uri)||realImage(uri)))}
 const sessionCookie=(token:string,secure:boolean,maxAge=2592000)=>'makom_session='+token+'; Path=/; HttpOnly; SameSite=Lax; Max-Age='+maxAge+(secure?'; Secure':'');
 async function body(request:Request):Promise<Record<string,unknown>>{if(!request.headers.get('Content-Type')?.startsWith('application/json'))throw Error('TYPE');const raw=await request.text();if(encoder.encode(raw).byteLength>LIMIT)throw Error('SIZE');const value=JSON.parse(raw);if(!value||typeof value!=='object'||Array.isArray(value))throw Error('BODY');return value}
-async function rate(db:D1Database,key:string,limit:number,seconds=900){const now=Math.floor(Date.now()/1000),bucket=Math.floor(now/seconds),id=key+':'+bucket;const result=await db.prepare('INSERT INTO rate_limits (key,attempts,expires_at) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(id,now+seconds).first<{attempts:number}>();return (result?.attempts||0)<=limit}
+async function rate(db:D1Database,key:string,limit:number,seconds=900){const now=Math.floor(Date.now()/1000),bucket=Math.floor(now/seconds),id=key+':'+bucket;const result=await db.prepare('INSERT INTO rate_limits (key,attempts,expires_at) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(id,now+seconds).first<{attempts:number}>();const ok=(result?.attempts||0)<=limit;if(!ok&&result?.attempts===limit+1)securityEvent('rate_limited',{rule:key.split(':')[0]});return ok}
 const RESET_TTL=900000;
 const DAY=86400000,SESSION_TTL=30*DAY,SESSION_RENEW_BELOW=15*DAY,LOGIN_FAILURES=10,LOGIN_WINDOW=900;
 /** Rejects passwords that are long enough but trivially guessable. Applies to new passwords only, never to sign-in. */
@@ -18,7 +33,8 @@ export function weakPassword(password:string,email:string){
  const lower=password.toLowerCase(),rows=['0123456789'.repeat(4),'9876543210'.repeat(4),'qwertyuiopasdfghjklzxcvbnm','abcdefghijklmnopqrstuvwxyz'];
  return password.trim().length<12||new Set(lower).size<5||lower.trim()===email||rows.some(r=>r.includes(lower));
 }
-async function loginFailures(db:D1Database,email:string){const now=Math.floor(Date.now()/1000);const row=await db.prepare('SELECT attempts FROM rate_limits WHERE key=?').bind('login-fail:'+await hash(email)+':'+Math.floor(now/LOGIN_WINDOW)).first<{attempts:number}>();return row?.attempts||0}
+/** Failed sign-ins in the current and the previous window, so the limit cannot be doubled at a window boundary. */
+async function loginFailures(db:D1Database,email:string){const now=Math.floor(Date.now()/1000),bucket=Math.floor(now/LOGIN_WINDOW),prefix='login-fail:'+await hash(email)+':';const row=await db.prepare('SELECT COALESCE(SUM(attempts),0) AS n FROM rate_limits WHERE key IN (?,?) AND expires_at>=?').bind(prefix+bucket,prefix+(bucket-1),now-LOGIN_WINDOW).first<{n:number}>();return row?.n||0}
 type ResetConfig={provider:'resend'|'brevo';key:string;from:string};
 function resetConfig(b:Bindings):ResetConfig|null{
  if(b.PASSWORD_RESET_ENABLED!=='true'||!b.RESET_FROM_EMAIL||b.RESET_FROM_EMAIL.length>=200||! /^[^\r\n]+$/.test(b.RESET_FROM_EMAIL))return null;
@@ -83,7 +99,18 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
  if(path==='/api/health')return json({accounts:!!db&&!!bucket,ai:false});
  if(path==='/api/assistant')return json({error:'AI_DISABLED'},503);
  if(!db||!bucket)return json({error:'SERVICE_UNAVAILABLE'},503);
- if(request.method!=='GET'){const origin=request.headers.get('Origin');if(origin&&origin!==url.origin)return json({error:'FORBIDDEN'},403);if(Number(request.headers.get('Content-Length')||0)>LIMIT)return json({error:'BACKUP_TOO_LARGE'},413)}
+ // HTTPS only (plain HTTP is allowed solely for local development on this machine).
+ const local=url.hostname==='localhost'||url.hostname==='127.0.0.1';
+ if(url.protocol!=='https:'&&!local){securityEvent('insecure_request',{path});return json({error:'HTTPS_REQUIRED'},403)}
+ // No CORS: other sites get no Access-Control headers, so browsers block their reads and preflighted writes.
+ if(!['GET','POST','PUT'].includes(request.method))return json({error:'METHOD'},405);
+ if(request.method!=='GET'){
+  // CSRF: a state-changing request must come from this site (Origin / Fetch Metadata) and be JSON, which a plain cross-site form cannot send.
+  const origin=request.headers.get('Origin'),site=request.headers.get('Sec-Fetch-Site');
+  if((origin&&origin!==url.origin)||(site&&site!=='same-origin'&&site!=='none')){securityEvent('cross_site_blocked',{path,site:site||'',origin:(origin||'').slice(0,80)});return json({error:'FORBIDDEN'},403)}
+  if(!request.headers.get('Content-Type')?.startsWith('application/json'))return json({error:'INVALID_REQUEST'},415);
+  if(Number(request.headers.get('Content-Length')||0)>LIMIT)return json({error:'BACKUP_TOO_LARGE'},413);
+ }
  try{
  if(path.startsWith('/api/auth/google/'))return await googleApi(request,bindings);
  if(path.startsWith('/api/auth/facebook/'))return await facebookApi(request,bindings);
@@ -105,8 +132,8 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
    return await startSession(created,db,secure,request,{...userView(created,bindings),verificationSent});
   }
   // Per-account limit on failed sign-ins, in addition to the per-IP limit, so changing IP does not allow unlimited guessing.
-  if(await loginFailures(db,email)>=LOGIN_FAILURES)return json({error:'TOO_MANY_ATTEMPTS'},429);
-  const derived=await passwordHash(password,existing?.salt||'00000000000000000000000000000000');if(!existing||!same(derived,existing.password_hash)){await rate(db,'login-fail:'+await hash(email),LOGIN_FAILURES,LOGIN_WINDOW);return json({error:'INVALID_LOGIN'},401)}
+  if(await loginFailures(db,email)>=LOGIN_FAILURES){securityEvent('login_locked',{account:await tag(email)});return json({error:'TOO_MANY_ATTEMPTS'},429)}
+  const derived=await passwordHash(password,existing?.salt||'00000000000000000000000000000000');if(!existing||!same(derived,existing.password_hash)){await rate(db,'login-fail:'+await hash(email),LOGIN_FAILURES,LOGIN_WINDOW);securityEvent('login_failed',{account:await tag(email),known:!!existing});return json({error:'INVALID_LOGIN'},401)}
   return await startSession(existing,db,secure,request,userView(existing,bindings));
  }
  if(path==='/api/auth/forgot'||path==='/api/auth/reset'){
@@ -127,7 +154,7 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   if(!/^\d{8}$/.test(code)||password.length<12||password.length>128)return json({error:'INVALID_CREDENTIAL_FORMAT'},400);
   if(weakPassword(password,email))return json({error:'WEAK_PASSWORD'},400);
   const attempt=await db.prepare('UPDATE password_resets SET attempts=attempts+1 WHERE email=? AND expires_at>? RETURNING code_hash,attempts').bind(email,Date.now()).first<{code_hash:string;attempts:number}>();
-  if(!attempt||attempt.attempts>5||!same(await resetHash(email,code),attempt.code_hash))return json({error:'INVALID_CODE'},400);
+  if(!attempt||attempt.attempts>5||!same(await resetHash(email,code),attempt.code_hash)){securityEvent('reset_code_rejected',{account:await tag(email),attempts:attempt?.attempts||0});return json({error:'INVALID_CODE'},400)}
   const owner=await db.prepare('SELECT id FROM accounts WHERE email=?').bind(email).first<{id:string}>();if(!owner)return json({error:'INVALID_CODE'},400);
   const salt=random(),derived=await passwordHash(password,salt);
   const consumed=await db.prepare('DELETE FROM password_resets WHERE email=? AND code_hash=? AND attempts<=5 AND expires_at>? RETURNING email').bind(email,attempt.code_hash,Date.now()).first<{email:string}>();
@@ -135,6 +162,7 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   await db.batch([db.prepare('UPDATE accounts SET salt=?,password_hash=? WHERE id=?').bind(salt,derived,owner.id),db.prepare('DELETE FROM sessions WHERE user_id=?').bind(owner.id),db.prepare('DELETE FROM password_resets WHERE email=?').bind(email),
    // A completed reset proves the person controls this address.
    db.prepare('UPDATE accounts SET email_verified_at=? WHERE id=? AND (email_verified_at IS NULL OR email_verified_at=0)').bind(Date.now(),owner.id),db.prepare('DELETE FROM email_verifications WHERE user_id=?').bind(owner.id)]);
+  securityEvent('password_reset',{account:await tag(email)});
   return json({ok:true});
  }
  const account=await authenticated(request,db);
@@ -150,7 +178,7 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
  if(!account)return json({error:'SIGN_IN_REQUIRED'},401);
  // A cookie may change in another tab. Never apply the old tab's data to the new account.
  const expectedUser=request.headers.get('X-Makom-User');
- if(expectedUser&&expectedUser!==account.id)return json({error:'SESSION_CHANGED'},409);
+ if(expectedUser&&expectedUser!==account.id){securityEvent('session_mismatch',{path});return json({error:'SESSION_CHANGED'},409)}
  if(path==='/api/auth/logout'&&request.method==='POST'){const token=request.headers.get('Cookie')?.match(/makom_session=([a-f0-9]{64})/)?.[1];if(token)await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(token)).run();return json({ok:true},200,sessionCookie('',secure,0))}
  if(path==='/api/account/verify/send'&&request.method==='POST'){
   const config=resetConfig(bindings);if(!config)return json({error:'VERIFY_UNAVAILABLE'},503);
@@ -164,7 +192,7 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   const data=await body(request),code=typeof data.code==='string'?data.code.trim():'';
   if(!/^\d{8}$/.test(code))return json({error:'INVALID_CODE'},400);
   const attempt=await db.prepare('UPDATE email_verifications SET attempts=attempts+1 WHERE user_id=? AND expires_at>? RETURNING code_hash,attempts,email').bind(account.id,Date.now()).first<{code_hash:string;attempts:number;email:string}>();
-  if(!attempt||attempt.attempts>5||attempt.email!==account.email||!same(await verifyHash(account.id,account.email,code),attempt.code_hash))return json({error:'INVALID_CODE'},400);
+  if(!attempt||attempt.attempts>5||attempt.email!==account.email||!same(await verifyHash(account.id,account.email,code),attempt.code_hash)){securityEvent('verify_code_rejected',{account:await tag(account.id),attempts:attempt?.attempts||0});return json({error:'INVALID_CODE'},400)}
   const at=Date.now();
   await db.batch([db.prepare('UPDATE accounts SET email_verified_at=? WHERE id=? AND email=?').bind(at,account.id,account.email),db.prepare('DELETE FROM email_verifications WHERE user_id=?').bind(account.id)]);
   return json({ok:true,user:userView({...account,email_verified_at:at},bindings)});
@@ -184,15 +212,17 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
   const updated={...account,email},config=resetConfig(bindings),verificationSent=config?await sendVerification(db,config,updated):false;
   return json({ok:true,user:{...userView(updated,bindings),verificationSent}});
  }
+ if(path==='/api/auth/logout-all'&&request.method==='POST'){await db.prepare('DELETE FROM sessions WHERE user_id=?').bind(account.id).run();securityEvent('logout_all',{account:await tag(account.id)});return json({ok:true},200,sessionCookie('',secure,0))}
  if(path==='/api/account/delete'&&request.method==='POST'){
   if(!await rate(db,'delete:'+account.id,5))return json({error:'TOO_MANY_ATTEMPTS'},429);
   const data=await body(request);
   if(typeof data.confirmEmail!=='string'||data.confirmEmail.trim().toLowerCase()!==account.email)return json({error:'CONFIRMATION_MISMATCH'},400);
-  await deleteAccountData(account,db,bucket);
+  await deleteAccountData(account,db,bucket);securityEvent('account_deleted',{account:await tag(account.id)});
   return json({ok:true},200,sessionCookie('',secure,0));
  }
  // Until a new account confirms its email, it can only verify, fix the address, sign out or delete itself.
  if(verificationRequired(account,bindings))return json({error:'EMAIL_NOT_VERIFIED'},403);
+ if(request.method==='GET'&&(path==='/api/memories'||path.startsWith('/api/backups'))&&!await rate(db,'read:'+account.id,600))return json({error:'TOO_MANY_ATTEMPTS'},429);
  if(path==='/api/memories'&&request.method==='GET'){
   if(!account.workspace_key)return json({items:[],revision:account.revision});const object=await bucket.get(account.workspace_key);if(!object)return json({error:'STORAGE_UNAVAILABLE'},503);return json({items:await object.json(),revision:account.revision});
  }
@@ -215,11 +245,13 @@ export async function handleAccountApi(request:Request,bindings:Bindings):Promis
    // A concurrent save may have replaced (and removed) the object we were about to read: that is a conflict to merge, not a storage fault.
    if(!previous)return await revisionMoved(db,account)?json({error:'CONFLICT'},409):json({error:'STORAGE_UNAVAILABLE'},503);
    const oldItems=await previous.json();if(!validItems(oldItems))return json({error:'STORAGE_UNAVAILABLE'},503);
+   if(!newImagesValid(data.items,oldItems)){securityEvent('image_rejected',{account:await tag(account.id)});return json({error:'INVALID_IMAGE'},400)}
    const oldText=JSON.stringify(oldItems);
    // Identical content: keep the revision and history unchanged so a no-op save never pushes a real version out of the three kept.
    if(oldText===nextText)return json({revision:account.revision,unchanged:true});
    await bucket.put(historyKey(account.id,account.revision),oldText,{httpMetadata:{contentType:'application/json'}});
   }else if(!data.items.length)return json({revision:account.revision,unchanged:true});
+  else if(!newImagesValid(data.items,[])){securityEvent('image_rejected',{account:await tag(account.id)});return json({error:'INVALID_IMAGE'},400)}
   const key='users/'+account.id+'/'+crypto.randomUUID()+'.json';await bucket.put(key,nextText,{httpMetadata:{contentType:'application/json'}});
   let changed:{revision:number}|null;
   try{changed=await db.prepare('UPDATE accounts SET workspace_key=?,revision=revision+1 WHERE id=? AND revision=? RETURNING revision').bind(key,account.id,account.revision).first<{revision:number}>()}catch(e){await bucket.delete(key).catch(()=>{});throw e}

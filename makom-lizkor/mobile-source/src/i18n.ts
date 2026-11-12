@@ -598,5 +598,10 @@ Object.assign(translations,{
   "לראות את הזוהר הצפוני": {"en": "See the northern lights", "ru": "Увидеть северное сияние"},
   "צילום מסך של מדריך: מתי ואיפה הכי כדאי לנסוע.": {"en": "A screenshot of a guide: when and where to go.", "ru": "Скриншот путеводителя: когда и куда лучше ехать."},
   "חלום מאז שהייתי ילד.": {"en": "A dream since I was a child.", "ru": "Мечта с детства."},
-  "לחסוך קצת כל חודש ולבדוק טיסות בסתיו.": {"en": "Save a little every month and check flights in autumn.", "ru": "Откладывать понемногу каждый месяц и посмотреть билеты осенью."}
+  "לחסוך קצת כל חודש ולבדוק טיסות בסתיו.": {"en": "Save a little every month and check flights in autumn.", "ru": "Откладывать понемногу каждый месяц и посмотреть билеты осенью."},
+  "אחת התמונות אינה קובץ תמונה תקין או שהיא גדולה מדי. נסה תמונה אחרת.": {"en": "One of the images is not a valid image file or is too large. Try another image.", "ru": "Одно из изображений повреждено или слишком велико. Попробуйте другое."},
+  "יש לפתוח את האתר בכתובת מאובטחת (https).": {"en": "Open the site at its secure (https) address.", "ru": "Откройте сайт по защищённому адресу (https)."},
+  "יציאה מכל המכשירים": {"en": "Sign out on all devices", "ru": "Выйти на всех устройствах"},
+  "למשל אם טלפון אבד: כל המכשירים שמחוברים לחשבון יתנתקו, כולל זה.": {"en": "For example if a phone was lost: every device signed in to the account is signed out, including this one.", "ru": "Например, если телефон потерян: все устройства, вошедшие в аккаунт, будут отключены, включая это."},
+  "יצאת מהחשבון בכל המכשירים.": {"en": "You were signed out on all devices.", "ru": "Вы вышли из аккаунта на всех устройствах."}
 });
