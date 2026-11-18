@@ -1,0 +1,8 @@
+google-genai
+edge-tts
+mss
+pillow
+sounddevice
+soundfile
+keyboard
+TikTokLive
